@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Certs (auto-generated)
+certs/
+
+# Editors
+.vscode/
+*.swp
+.DS_Store

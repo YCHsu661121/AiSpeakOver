@@ -78,6 +78,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // 請求麥克風權限，成功就同時啟動音量計 + 語音辨識
+function micErrMsg(e) {
+  const n = e.name || '';
+  if (n === 'NotFoundError' || n === 'DevicesNotFoundError')
+    return '找不到麥克風裝置，請確認麥克風已插入並未被其他程式佔用';
+  if (n === 'NotAllowedError' || n === 'PermissionDeniedError')
+    return '麥克風權限被拒絕，請在瀏覽器網址列允許麥克風存取';
+  if (n === 'NotReadableError' || n === 'TrackStartError')
+    return '麥克風已被其他應用程式佔用，請關閉後再試';
+  if (n === 'OverconstrainedError')
+    return '麥克風不支援所要求的音訊格式';
+  return '麥克風錯誤：' + (e.message || n || e);
+}
+
 async function requestMicAndStart() {
   // mediaDevices 在 HTTP 非 localhost 下不存在
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -91,11 +104,12 @@ async function requestMicAndStart() {
     if (sttMode === 'whisper') initWhisperMode(stream);
     else startListening();
   } catch (e) {
-    showMicPrompt();
+    dbg('getUserMedia failed: ' + e.name + ' — ' + e.message, 'error');
+    showMicPrompt(e);
   }
 }
 
-function showMicPrompt() {
+function showMicPrompt(err) {
   setBadge(false, true);
   const bar = document.getElementById('statusBar');
   bar.className = 'statusbar error';
@@ -103,6 +117,12 @@ function showMicPrompt() {
   // HTTP 非 localhost：無法使用麥克風，顯示說明
   if (!window.isSecureContext || !navigator.mediaDevices) {
     bar.textContent = '⚠️ 需要 HTTPS 才能使用麥克風，請改用 https:// 或 localhost 開啟';
+    return;
+  }
+
+  // 已知錯誤（NotFoundError 等）：直接顯示說明，不顯示按鈕重試也沒意義
+  if (err && err.name !== 'NotAllowedError' && err.name !== 'PermissionDeniedError') {
+    bar.textContent = '⚠️ ' + micErrMsg(err);
     return;
   }
 
@@ -122,7 +142,8 @@ function showMicPrompt() {
       if (sttMode === 'whisper') initWhisperMode(stream);
       else startListening();
     } catch (e) {
-      bar.textContent = '麥克風被拒絕：' + e.message;
+      dbg('mic retry failed: ' + e.name + ' — ' + e.message, 'error');
+      bar.textContent = '⚠️ ' + micErrMsg(e);
       bar.className = 'statusbar error';
     }
   };

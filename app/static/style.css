@@ -666,7 +666,7 @@ button, select, input, [role="button"] {
   resize: both;
   overflow: hidden;
 }
-#debugPanel[hidden] { display: none; }
+#debugPanel[hidden] { display: none !important; }
 
 .debug-header {
   display: flex;

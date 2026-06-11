@@ -60,7 +60,8 @@ function dbg(msg, level = 'info') {
 function clearDebugLog() { const l = document.getElementById('debugLog'); if (l) l.innerHTML = ''; }
 function toggleDebugPanel() {
   const p = document.getElementById('debugPanel');
-  if (p) p.hidden = !p.hidden;
+  if (!p) return;
+  p.style.display = (p.style.display === 'none') ? 'flex' : 'none';
 }
 
 // 拖曳 debug 視窗
@@ -100,6 +101,10 @@ document.addEventListener('keydown', e => {
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // Force debug panel visible
+  const dbgPanel = document.getElementById('debugPanel');
+  if (dbgPanel) { dbgPanel.removeAttribute('hidden'); dbgPanel.style.display = 'flex'; }
+
   await loadConfig();
   await loadModels();
   checkOllamaHealth();   // 非阻塞，背景執行

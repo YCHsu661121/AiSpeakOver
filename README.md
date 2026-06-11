@@ -167,7 +167,7 @@ nemo_model: "stt_zh_conformer_ctc_large"
 
 | 語言 | 模型 |
 |---|---|
-| 中文 | `stt_zh_conformer_ctc_large` |
+| 中文 | `stt_zh_conformer_transducer_large` |
 | 英文 | `nvidia/parakeet-tdt-0.6b-v2` |
 | 日文 | `stt_ja_fastconformer_hybrid_large` |
 | 韓文 | `stt_ko_conformer_ctc_large` |

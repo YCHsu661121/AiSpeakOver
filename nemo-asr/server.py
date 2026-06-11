@@ -106,10 +106,18 @@ async def transcribe(
         try:
             m = get_model()
             results = m.transcribe([str(out_path)])
-            # Result may be a string or a Hypothesis object
-            text = results[0] if results else ""
-            if hasattr(text, "text"):
-                text = text.text
-            return {"text": str(text).strip()}
+            # CTC models return List[str]; RNNT/Transducer models return
+            # List[Hypothesis] or a tuple (hypotheses, _) depending on NeMo version
+            raw = results
+            if isinstance(raw, tuple):          # (hypotheses, extra)
+                raw = raw[0]
+            item = raw[0] if raw else ""
+            if hasattr(item, "text"):           # Hypothesis object
+                text = item.text
+            elif hasattr(item, "y_sequence"):   # older RNNT Hypothesis
+                text = str(item)
+            else:
+                text = str(item)
+            return {"text": text.strip() if isinstance(text, str) else str(text).strip()}
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)

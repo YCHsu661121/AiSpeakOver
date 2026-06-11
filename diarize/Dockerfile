@@ -1,9 +1,9 @@
 FROM python:3.11-slim
 
 # System libs: ffmpeg for audio, libsndfile for resemblyzer/soundfile,
-# gcc to compile webrtcvad C extension (resemblyzer dep; headers already in slim image)
+# build-essential (gcc + libc-dev) to compile webrtcvad C extension
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg libsndfile1 gcc && rm -rf /var/lib/apt/lists/*
+    ffmpeg libsndfile1 build-essential && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

@@ -76,6 +76,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadConfig();
   await loadModels();
+  checkOllamaHealth();   // 非阻塞，背景執行
   setupControls();
   initSpeech();
   // 行動裝置 HTTP 下 mediaDevices 可能不存在，改為手動點擊才啟動
@@ -220,7 +221,36 @@ function _updateModelBadge() {
   badge.textContent = currentModel ? `・${currentModel}` : '・未選模型';
   badge.style.color = currentModel ? '#8f8' : '#f88';
 }
-
+async function checkOllamaHealth() {
+  let dot = document.getElementById('ollamaDot');
+  if (!dot) {
+    dot = document.createElement('span');
+    dot.id = 'ollamaDot';
+    dot.title = 'Ollama 連線狀態';
+    dot.style.cssText = 'font-size:.75rem;margin-left:8px;cursor:pointer;';
+    dot.onclick = () => checkOllamaHealth();
+    const brand = document.querySelector('.brand');
+    if (brand) brand.appendChild(dot);
+  }
+  dot.textContent = '⏳';
+  try {
+    const h = await fetch('/api/health').then(r => r.json());
+    if (h.ollama) {
+      dot.textContent = '🟢';
+      dot.title = `Ollama OK · 模型: ${(h.ollama_models || []).join(', ') || '(無)'}`;
+      dbg(`Ollama OK  模型: ${(h.ollama_models || []).join(', ')}`, 'ok');
+    } else {
+      dot.textContent = '🔴';
+      dot.title = `Ollama 無法連線: ${h.ollama_error || ''}`;
+      dbg(`Ollama 無法連線: ${h.ollama_error || ''}`, 'error');
+      setStatus('⚠️ Ollama 無法連線，翻譯不可用', 'error');
+    }
+  } catch (e) {
+    dot.textContent = '🔴';
+    dot.title = 'Ollama 連線失敗';
+    dbg('Ollama health check failed: ' + e.message, 'error');
+  }
+}
 async function showModelPicker() {
   const overlay  = document.getElementById('modelPicker');
   const listEl   = document.getElementById('pickerList');

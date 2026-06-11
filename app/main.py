@@ -121,6 +121,39 @@ async def api_diarize_reset():
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+@app.get("/api/health")
+async def api_health():
+    """Overall health: ollama + whisper + nemo (3 s timeout each)."""
+    results: dict = {}
+    async with httpx.AsyncClient(timeout=3) as client:
+        # Ollama
+        try:
+            r = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            models = [m["name"] for m in r.json().get("models", [])]
+            results["ollama"] = True
+            results["ollama_models"] = models
+        except Exception as exc:
+            results["ollama"] = False
+            results["ollama_error"] = str(exc)
+        # STT
+        for name, url in [("whisper", WHISPER_BASE_URL), ("nemo", NEMO_BASE_URL)]:
+            try:
+                r = await client.get(f"{url}/health")
+                body = r.json()
+                if name == "nemo":
+                    results["nemo"] = body.get("status") == "ready"
+                    results["nemo_status"] = body.get("status", "unknown")
+                    if body.get("error"):
+                        results["nemo_error"] = body["error"]
+                else:
+                    results[name] = r.status_code < 500
+            except Exception as exc:
+                results[name] = False
+                if name == "nemo":
+                    results["nemo_status"] = f"unreachable"
+    return results
+
+
 @app.get("/api/stt/health")
 async def api_stt_health():
     """Quick reachability check for each STT backend (3 s connect timeout)."""

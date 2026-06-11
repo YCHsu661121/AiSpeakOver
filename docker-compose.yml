@@ -74,6 +74,12 @@ services:
       - DIARIZE_BASE_URL=http://diarize:8002
       # 使用 NeMo profile 時取消注釋下行：
       # - DEFAULT_STT=nemo
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/config')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   # ── NVIDIA NeMo ASR server (opt-in, requires NVIDIA GPU) ─────────────────
   # Enable with:  docker compose --profile nemo up -d
@@ -104,7 +110,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - nginx-certs:/etc/nginx/certs
     depends_on:
-      - aispeakover
+      aispeakover:
+        condition: service_healthy
     restart: unless-stopped
     command: >
       sh -c "

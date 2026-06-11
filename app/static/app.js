@@ -7,6 +7,7 @@ let currentModel  = '';
 let sourceLang    = 'zh-TW';
 let targetLang    = 'en';
 let isPulling     = false;  // true while auto-downloading a model
+let dualMode      = false;  // dual-speaker (diarize) mode
 
 const LANG_LABELS = {
   'zh-TW': '中文（繁體）',

@@ -794,9 +794,18 @@ async function triggerTranslation(text) {
       signal:  ctrl.signal,
     });
 
+    dbg(`← /api/translate  HTTP ${resp.status}`, resp.ok ? 'ok' : 'error');
+    if (!resp.ok) {
+      const errText = await resp.text();
+      dbg(`translate HTTP error: ${errText}`, 'error');
+      setStatus(`翻譯失敗 (HTTP ${resp.status})`, 'error');
+      return;
+    }
+
     const reader  = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
+    let gotContent = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -809,11 +818,13 @@ async function triggerTranslation(text) {
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         const payload = line.slice(6);
-        if (payload === '[DONE]') break;
+        if (payload === '[DONE]') { dbg('translate DONE', 'ok'); break; }
         try {
           const parsed = JSON.parse(payload);
-          if (parsed.error) { setStatus('翻譯錯誤：' + parsed.error, 'error'); break; }
+          if (parsed.error) { dbg(`translate stream error: ${parsed.error}`, 'error'); setStatus('翻譯錯誤：' + parsed.error, 'error'); break; }
           if (parsed.content) {
+            if (!gotContent) dbg('translate first token received', 'ok');
+            gotContent = true;
             block.textContent += parsed.content;
             outEl.scrollTop = outEl.scrollHeight;
           }
@@ -821,6 +832,7 @@ async function triggerTranslation(text) {
       }
     }
 
+    if (!gotContent) dbg('translate: no content received from Ollama', 'warn');
     setStatus('🎙 正在監聽…', 'listening');
   } catch (e) {
     dbg(`translate error: ${e.message}`, 'error');

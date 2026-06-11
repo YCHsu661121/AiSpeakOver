@@ -11,7 +11,7 @@
 #       --index-url https://download.pytorch.org/whl/cpu
 #   RUN pip install --no-cache-dir nemo_toolkit[asr]
 
-FROM nvcr.io/nvidia/nemo:25.02
+FROM nvcr.io/nvidia/nemo:25.04
 
 WORKDIR /app
 

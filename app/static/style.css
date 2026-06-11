@@ -712,7 +712,7 @@ button, select, input, [role="button"] {
 .dbg-tag.warn  { color: #d29922; }
 .dbg-tag.error { color: #f85149; }
 .dbg-msg { word-break: break-all; flex: 1; }
-}
+
 .dual-speech::-webkit-scrollbar { width: 4px; }
 .dual-speech::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 

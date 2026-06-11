@@ -34,6 +34,17 @@ services:
         echo 'Done.'
       "
 
+  # ── Speaker diarization (resemblyzer + spectralcluster) ───────────────────
+  diarize:
+    build: ./diarize
+    volumes:
+      - diarize-models:/root/.cache
+    environment:
+      - SIM_THRESHOLD=0.80
+      - MAX_SPEAKERS=2
+      - RECLUSTER_N=10
+    restart: unless-stopped
+
   # ── faster-whisper STT server ────────────────────────────────────────────
   whisper:
     image: fedirz/faster-whisper-server:latest-cpu
@@ -54,10 +65,12 @@ services:
     depends_on:
       - ollama
       - whisper
+      - diarize
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - WHISPER_BASE_URL=http://whisper:8000
       - NEMO_BASE_URL=http://nemo-asr:8001
+      - DIARIZE_BASE_URL=http://diarize:8002
       # 使用 NeMo profile 時取消注釋下行：
       # - DEFAULT_STT=nemo
 
@@ -107,4 +120,5 @@ volumes:
   nginx-certs:     # SSL 憑證持久化
   whisper-models:  # faster-whisper 模型快取
   nemo-models:     # NeMo / HuggingFace 模型快取
+  diarize-models:  # resemblyzer GE2E 模型快取
 

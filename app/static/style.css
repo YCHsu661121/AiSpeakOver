@@ -559,26 +559,71 @@ button, select, input, [role="button"] {
   white-space: nowrap;
 }
 
-/* PTT button */
-.ptt-btn {
-  width: 100%;
-  padding: 10px 12px;
-  margin-bottom: 10px;
+/* PTT button — kept for reference but no longer rendered */
+/*
+.ptt-btn { ... }
+*/
+
+/* ── Dual toolbar ────────────────────────────── */
+.dual-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
   background: var(--surface);
-  color: var(--text);
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  font-size: .9rem;
-  cursor: pointer;
-  text-align: center;
-  transition: background .15s, border-color .15s, color .15s;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
-.ptt-btn:hover { border-color: var(--accent); }
-.ptt-btn.active {
+
+.dual-rec-btn {
+  background: var(--green);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  padding: 7px 18px;
+  font-size: .88rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity .15s, background .15s;
+}
+.dual-rec-btn:hover { opacity: .88; }
+.dual-rec-btn.recording {
   background: var(--red);
-  border-color: var(--red);
   color: #fff;
   animation: pulse 1.2s ease-in-out infinite;
+}
+
+.spk-indicators {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+}
+
+.spk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: .8rem;
+  font-weight: 600;
+  background: #222;
+  border: 2px solid transparent;
+  transition: border-color .2s, background .2s;
+  user-select: none;
+}
+.spk-badge.spk-a { color: #60a5fa; }
+.spk-badge.spk-b { color: #fb923c; }
+.spk-badge.active.spk-a { background: #1e3a5f; border-color: #60a5fa; }
+.spk-badge.active.spk-b { background: #431407; border-color: #fb923c; }
+
+@media (max-width: 640px) {
+  .dual-toolbar { padding: 7px 12px; gap: 7px; }
+  .dual-rec-btn { padding: 9px 14px; font-size: .85rem; }
+  .spk-badge    { padding: 4px 9px; font-size: .76rem; }
 }
 
 /* Dual body: split into speech (top) + translation (bottom) */

@@ -99,6 +99,16 @@
     <!-- ── Dual-speaker panels (hidden until mode toggle) ─── -->
     <main class="panels dual-panels" id="panelsDual" hidden>
 
+      <!-- Toolbar: record + speaker indicators + reset -->
+      <div class="dual-toolbar">
+        <button id="dualRecordToggle" class="dual-rec-btn">▶ 開始辨識</button>
+        <div class="spk-indicators">
+          <span class="spk-badge spk-a" id="spkBadgeA">🔵 講者 A</span>
+          <span class="spk-badge spk-b" id="spkBadgeB">🟠 講者 B</span>
+        </div>
+        <button id="dualReset" class="btn-ghost">🔄 重設講者</button>
+      </div>
+
       <!-- Speaker A -->
       <div class="dual-col" id="dualColA">
         <div class="dual-head">
@@ -112,7 +122,6 @@
           <span class="dual-arrow">→</span>
           <span class="dual-tgt-label" id="dualTgtLabelA">English</span>
         </div>
-        <button class="ptt-btn" id="pttA">🎤 中文（繁體）說話</button>
         <div class="dual-body">
           <div class="dual-speech" id="dual-speech-a"></div>
           <div class="dual-divider-label">↓ 翻譯</div>
@@ -139,8 +148,7 @@
           <span class="dual-arrow">→</span>
           <span class="dual-tgt-label" id="dualTgtLabelB">中文（繁體）</span>
         </div>
-        <button class="ptt-btn" id="pttB">🎤 English 說話</button>
-        <div class="dual-body">
+        <div class="dual-body" id="dualBodyB">
           <div class="dual-speech" id="dual-speech-b"></div>
           <div class="dual-divider-label">↓ 翻譯</div>
           <div class="dual-trans" id="dual-trans-b"></div>

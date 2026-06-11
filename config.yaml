@@ -34,3 +34,8 @@ whisper_model: "Systran/faster-whisper-small"
 # 推薦韓文模型：stt_ko_conformer_ctc_large
 nemo_base_url: "http://nemo-asr:8001"
 nemo_model: "stt_zh_conformer_ctc_large"
+
+# 講者辨識 (resemblyzer + spectralcluster)
+diarize_base_url: "http://diarize:8002"
+# 相似度關母對：越高越嚴格（講者需要更相似才被認為同一人）
+sim_threshold: 0.80

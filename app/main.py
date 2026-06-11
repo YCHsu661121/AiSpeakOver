@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,7 @@ WHISPER_MODEL:    str = _cfg.get("whisper_model", "Systran/faster-whisper-small"
 NEMO_BASE_URL:    str = os.environ.get("NEMO_BASE_URL") or _cfg.get("nemo_base_url", "http://nemo-asr:8001")
 NEMO_MODEL:       str = _cfg.get("nemo_model", "stt_zh_conformer_ctc_large")
 DEFAULT_STT:      str = os.environ.get("DEFAULT_STT") or _cfg.get("default_stt", "whisper")
+DIARIZE_BASE_URL: str = os.environ.get("DIARIZE_BASE_URL") or _cfg.get("diarize_base_url", "http://diarize:8002")
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
@@ -45,17 +47,19 @@ async def api_config():
         "whisper_model":       WHISPER_MODEL,
         "nemo_model":          NEMO_MODEL,
         "default_stt":         DEFAULT_STT,
+        "diarize_base_url":    DIARIZE_BASE_URL,
     }
 
 
 @app.post("/api/transcribe")
 async def api_transcribe(
     audio: UploadFile,
-    language: str = Form("zh"),
+    language: str = Form(""),           # empty string = auto-detect
     model: str | None = Form(None),
-    backend: str = Form("whisper"),  # "whisper" | "nemo"
+    backend: str = Form("whisper"),     # "whisper" | "nemo"
+    diarize_req: str = Form("false", alias="diarize"),
 ):
-    """Proxy audio to the selected STT backend (faster-whisper or NeMo) and return text."""
+    """Proxy audio to STT backend; optionally run speaker diarization in parallel."""
     if backend == "nemo":
         base_url  = NEMO_BASE_URL
         stt_model = model or NEMO_MODEL
@@ -65,16 +69,54 @@ async def api_transcribe(
         stt_model = model or WHISPER_MODEL
         timeout   = 30
 
-    audio_bytes = await audio.read()
-    try:
+    audio_bytes  = await audio.read()
+    filename     = audio.filename or "audio.webm"
+    content_type = audio.content_type or "audio/webm"
+
+    async def stt_call() -> str:
         async with httpx.AsyncClient(timeout=timeout) as client:
+            stt_data: dict = {"model": stt_model, "response_format": "json"}
+            if language:
+                stt_data["language"] = language
             resp = await client.post(
                 f"{base_url}/v1/audio/transcriptions",
-                files={"file": (audio.filename or "audio.webm", audio_bytes, audio.content_type or "audio/webm")},
-                data={"model": stt_model, "language": language, "response_format": "json"},
+                files={"file": (filename, audio_bytes, content_type)},
+                data=stt_data,
             )
             resp.raise_for_status()
-            return {"text": resp.json().get("text", "").strip()}
+            return resp.json().get("text", "").strip()
+
+    async def diarize_call() -> int:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{DIARIZE_BASE_URL}/assign",
+                files={"audio": (filename, audio_bytes, content_type)},
+            )
+            resp.raise_for_status()
+            return int(resp.json().get("speaker_id", 0))
+
+    try:
+        if diarize_req.lower() == "true":
+            results = await asyncio.gather(stt_call(), diarize_call(), return_exceptions=True)
+            if isinstance(results[0], Exception):
+                return JSONResponse({"error": str(results[0])}, status_code=500)
+            text       = results[0]
+            speaker_id = results[1] if not isinstance(results[1], Exception) else None
+            return {"text": text, "speaker_id": speaker_id}
+        else:
+            text = await stt_call()
+            return {"text": text}
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/api/diarize/reset")
+async def api_diarize_reset():
+    """Forward reset request to the diarize service."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.post(f"{DIARIZE_BASE_URL}/reset")
+            return resp.json()
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 

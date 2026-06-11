@@ -289,8 +289,8 @@ function setupControls() {
     dualSpeaker.b.lang = e.target.value;
     updateDualLabels();
   });
-  document.getElementById('pttA').addEventListener('click', () => togglePtt('a'));
-  document.getElementById('pttB').addEventListener('click', () => togglePtt('b'));
+  document.getElementById('dualRecordToggle').addEventListener('click', toggleDualRecord);
+  document.getElementById('dualReset').addEventListener('click', resetDiarization);
 }
 
 function updateLangLabels() {
@@ -563,8 +563,10 @@ async function flushWhisperChunk() {
 
   const form = new FormData();
   form.append('audio', blob, 'audio.webm');
-  form.append('language', WHISPER_LANG[sourceLang] || 'zh');
+  // In dual mode: no language hint (Whisper auto-detects); in single: use source lang
+  if (!dualMode) form.append('language', WHISPER_LANG[sourceLang] || 'zh');
   form.append('backend', sttMode === 'nemo' ? 'nemo' : 'whisper');
+  if (dualMode) form.append('diarize', 'true');
 
   const modeLabel = sttMode === 'nemo' ? 'NeMo' : 'Whisper';
   const modeIcon  = sttMode === 'nemo' ? '🔥' : '🤫';
@@ -574,15 +576,30 @@ async function flushWhisperChunk() {
     const data = await resp.json();
     if (data.error) { setStatus('識別錯誤：' + data.error, 'error'); return; }
     const text = (data.text || '').trim();
-    if (!text) { setStatus(`${modeIcon} ${modeLabel} 監聽中…`, 'listening'); return; }
 
-    appendFinal(text);
-    document.getElementById('interimText').textContent = '';
-    if (text !== _lastSentText) {
-      _lastSentText = text;
-      triggerTranslation(text);
+    if (dualMode) {
+      if (!text) { setStatus('🟢 講者辨識中…', 'listening'); return; }
+      const sp      = (data.speaker_id ?? 0) === 0 ? 'a' : 'b';
+      const srcLang = dualSpeaker[sp].lang;
+      const tgtLang = sp === 'a' ? dualSpeaker.b.lang : dualSpeaker.a.lang;
+      updateSpkBadge(sp);
+      const speechEl = document.getElementById('dual-speech-' + sp);
+      const span = document.createElement('span');
+      span.className = 'sentence';
+      span.textContent = text + ' ';
+      speechEl.appendChild(span);
+      speechEl.scrollTop = speechEl.scrollHeight;
+      dualTranslate(text, srcLang, tgtLang, document.getElementById('dual-trans-' + sp));
     } else {
-      setStatus(`${modeIcon} ${modeLabel} 監聽中…`, 'listening');
+      if (!text) { setStatus(`${modeIcon} ${modeLabel} 監聽中…`, 'listening'); return; }
+      appendFinal(text);
+      document.getElementById('interimText').textContent = '';
+      if (text !== _lastSentText) {
+        _lastSentText = text;
+        triggerTranslation(text);
+      } else {
+        setStatus(`${modeIcon} ${modeLabel} 監聽中…`, 'listening');
+      }
     }
   } catch (e) {
     setStatus('識別失敗：' + e.message, 'error');
@@ -714,15 +731,19 @@ function toggleDualMode() {
   document.getElementById('modeToggle').textContent = dualMode ? '⇌ 單人' : '⇌ 雙向';
 
   if (dualMode) {
-    // Stop single-speaker recognition
+    // Dual mode requires Whisper/NeMo — auto-switch if Web Speech selected
+    if (sttMode === 'webspeech') {
+      setSttMode('whisper');
+      document.getElementById('sttToggle').value = 'whisper';
+    }
     clearTimeout(restartTimer); restartTimer = null;
     if (recognition) try { recognition.stop(); } catch (_) {}
     stopWhisperMode();
     updateDualLabels();
-    setStatus('雙向模式：按下說話鍵開始', 'listening');
+    setStatus('🟢 雙向模式：按「開始識別」啟動', 'listening');
   } else {
-    stopDualPtt();
-    // Resume single-speaker mode
+    if (_dualIsRecording) { stopWhisperMode(); _dualIsRecording = false; }
+    _updateDualRecBtn();
     if (sttMode === 'whisper' || sttMode === 'nemo') {
       if (_micStream) initWhisperMode(_micStream);
     } else {
@@ -731,108 +752,55 @@ function toggleDualMode() {
   }
 }
 
+function _updateDualRecBtn() {
+  const btn = document.getElementById('dualRecordToggle');
+  if (!btn) return;
+  btn.textContent = _dualIsRecording ? '⏹ 停止' : '▶ 開始識別';
+  btn.classList.toggle('recording', _dualIsRecording);
+}
+
+function toggleDualRecord() {
+  if (!dualMode) return;
+  if (_dualIsRecording) {
+    stopWhisperMode();
+    _dualIsRecording = false;
+    setStatus('🟢 雙向模式：按「開始識別」啟動', 'listening');
+  } else {
+    if (!_micStream) { setStatus('麥克風尚未連接', 'error'); return; }
+    initWhisperMode(_micStream);
+    _dualIsRecording = true;
+    setStatus('🟢 講者辨識中…', 'listening');
+  }
+  _updateDualRecBtn();
+}
+
+async function resetDiarization() {
+  try { await fetch('/api/diarize/reset', { method: 'POST' }); } catch (_) {}
+  clearDual('a');
+  clearDual('b');
+  document.getElementById('spkBadgeA').classList.remove('active');
+  document.getElementById('spkBadgeB').classList.remove('active');
+  setStatus('🔄 講者狀態已重設', 'listening');
+}
+
+let _spkBadgeTimer = null;
+function updateSpkBadge(sp) {
+  const a = document.getElementById('spkBadgeA');
+  const b = document.getElementById('spkBadgeB');
+  a.classList.toggle('active', sp === 'a');
+  b.classList.toggle('active', sp === 'b');
+  clearTimeout(_spkBadgeTimer);
+  _spkBadgeTimer = setTimeout(() => {
+    a.classList.remove('active');
+    b.classList.remove('active');
+  }, 2500);
+}
+
 function updateDualLabels() {
   document.getElementById('dualTgtLabelA').textContent =
     LANG_LABELS_DUAL[dualSpeaker.b.lang] || dualSpeaker.b.lang;
   document.getElementById('dualTgtLabelB').textContent =
     LANG_LABELS_DUAL[dualSpeaker.a.lang] || dualSpeaker.a.lang;
-
-  const lblA = LANG_LABELS_DUAL[dualSpeaker.a.lang] || dualSpeaker.a.lang;
-  const lblB = LANG_LABELS_DUAL[dualSpeaker.b.lang] || dualSpeaker.b.lang;
-  document.getElementById('pttA').textContent = `🎤 ${lblA} 說話`;
-  document.getElementById('pttB').textContent = `🎤 ${lblB} 說話`;
-}
-
-function togglePtt(speaker) {
-  if (_dualActiveSpeaker === speaker) {
-    stopDualPtt();
-  } else {
-    if (_dualActiveSpeaker) stopDualPtt();
-    startDualPtt(speaker);
-  }
-}
-
-function startDualPtt(speaker) {
-  _dualActiveSpeaker = speaker;
-  const btn = document.getElementById('ptt' + speaker.toUpperCase());
-  btn.classList.add('active');
-  const lbl = LANG_LABELS_DUAL[dualSpeaker[speaker].lang] || dualSpeaker[speaker].lang;
-  btn.textContent = `🔴 ${lbl} 錄音中…`;
-  setStatus(`🎤 ${lbl} 錄音中…`, 'listening');
-
-  if (sttMode === 'webspeech') {
-    // Use Web Speech — set language and start
-    if (recognition) {
-      recognition.lang = STT_LOCALE[dualSpeaker[speaker].lang] || dualSpeaker[speaker].lang;
-      try { recognition.start(); } catch (_) {}
-    }
-  } else {
-    // Whisper / NeMo — use MediaRecorder
-    if (!_micStream) { setStatus('麥克風尚未連接', 'error'); return; }
-    _dualChunks   = [];
-    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
-      .find(m => MediaRecorder.isTypeSupported(m)) || '';
-    _dualRecorder = new MediaRecorder(_micStream, mime ? { mimeType: mime } : undefined);
-    _dualRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) _dualChunks.push(e.data); };
-    _dualRecorder.start(200);
-  }
-}
-
-async function stopDualPtt() {
-  if (!_dualActiveSpeaker) return;
-  const sp  = _dualActiveSpeaker;
-  _dualActiveSpeaker = null;
-
-  const btn = document.getElementById('ptt' + sp.toUpperCase());
-  btn.classList.remove('active');
-  updateDualLabels();
-
-  if (sttMode === 'webspeech') {
-    if (recognition) try { recognition.stop(); } catch (_) {}
-    return;
-  }
-
-  // Flush Whisper / NeMo
-  if (!_dualRecorder) return;
-  _dualRecorder.stop();
-  _dualRecorder = null;
-
-  const chunks = [..._dualChunks];
-  _dualChunks = [];
-  if (chunks.length === 0) return;
-
-  const mimeType = 'audio/webm';
-  const blob = new Blob(chunks, { type: mimeType });
-  if (blob.size < 500) return;
-
-  const lang = dualSpeaker[sp].lang;
-  const tgtLang = sp === 'a' ? dualSpeaker.b.lang : dualSpeaker.a.lang;
-  const speechEl = document.getElementById('dual-speech-' + sp);
-  const transEl  = document.getElementById('dual-trans-' + sp);
-
-  setStatus('⏳ 辨識中…');
-  const form = new FormData();
-  form.append('audio', blob, 'audio.webm');
-  form.append('language', WHISPER_LANG[lang] || 'zh');
-  form.append('backend',  sttMode === 'nemo' ? 'nemo' : 'whisper');
-
-  try {
-    const resp = await fetch('/api/transcribe', { method: 'POST', body: form });
-    const data = await resp.json();
-    if (data.error) { setStatus('辨識錯誤：' + data.error, 'error'); return; }
-    const text = (data.text || '').trim();
-    if (!text) { setStatus('雙向模式：按下說話鍵開始', 'listening'); return; }
-
-    const span = document.createElement('span');
-    span.className = 'sentence';
-    span.textContent = text + ' ';
-    speechEl.appendChild(span);
-    speechEl.scrollTop = speechEl.scrollHeight;
-
-    dualTranslate(text, lang, tgtLang, transEl);
-  } catch (e) {
-    setStatus('辨識失敗：' + e.message, 'error');
-  }
 }
 
 async function dualTranslate(text, srcLang, tgtLang, outEl) {
@@ -842,14 +810,11 @@ async function dualTranslate(text, srcLang, tgtLang, outEl) {
   outEl.appendChild(block);
   outEl.scrollTop = outEl.scrollHeight;
   setStatus('⏳ 翻譯中…');
-
-  const ctrl = new AbortController();
   try {
     const resp = await fetch('/api/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, source_lang: srcLang, target_lang: tgtLang, model: currentModel }),
-      signal: ctrl.signal,
     });
     const reader  = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -864,12 +829,12 @@ async function dualTranslate(text, srcLang, tgtLang, outEl) {
         const payload = line.slice(6);
         if (payload === '[DONE]') break;
         try {
-          const parsed = JSON.parse(payload);
-          if (parsed.content) { block.textContent += parsed.content; outEl.scrollTop = outEl.scrollHeight; }
+          const p = JSON.parse(payload);
+          if (p.content) { block.textContent += p.content; outEl.scrollTop = outEl.scrollHeight; }
         } catch (_) {}
       }
     }
-    setStatus('雙向模式：按下說話鍵開始', 'listening');
+    setStatus('🟢 講者辨識中…', 'listening');
   } catch (e) {
     if (e.name !== 'AbortError') setStatus('翻譯失敗：' + e.message, 'error');
   }
@@ -879,3 +844,7 @@ function clearDual(sp) {
   document.getElementById('dual-speech-' + sp).innerHTML = '';
   document.getElementById('dual-trans-'  + sp).innerHTML = '';
 }
+
+
+// (PTT functions removed — replaced by automatic diarization)
+

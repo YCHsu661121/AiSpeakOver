@@ -63,6 +63,32 @@ function toggleDebugPanel() {
   if (p) p.hidden = !p.hidden;
 }
 
+// 拖曳 debug 視窗
+(function initDebugDrag() {
+  document.addEventListener('DOMContentLoaded', () => {
+    const panel = document.getElementById('debugPanel');
+    const header = panel && panel.querySelector('.debug-header');
+    if (!panel || !header) return;
+    let ox = 0, oy = 0, dragging = false;
+    header.addEventListener('mousedown', e => {
+      if (e.target.tagName === 'BUTTON') return;
+      dragging = true;
+      const r = panel.getBoundingClientRect();
+      ox = e.clientX - r.left;
+      oy = e.clientY - r.top;
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      panel.style.left = (e.clientX - ox) + 'px';
+      panel.style.top  = (e.clientY - oy) + 'px';
+    });
+    document.addEventListener('mouseup', () => { dragging = false; });
+  });
+})();
+
 // Ctrl+Shift+D 鍵盤快捷鍵
 document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.shiftKey && e.key === 'D') {

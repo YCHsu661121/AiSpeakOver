@@ -21,3 +21,12 @@ default_target_lang: "en"
 whisper_base_url: "http://whisper:8000"
 # 可選模型：tiny / base / small / medium / large-v3
 whisper_model: "Systran/faster-whisper-small"
+
+# NeMo ASR 服務 (NVIDIA NeMo，需 NVIDIA GPU)
+# 啟動方式：docker compose --profile nemo up -d
+# 推薦中文模型：stt_zh_conformer_ctc_large / stt_zh_conformer_transducer_large
+# 推薦英文模型：nvidia/parakeet-tdt-0.6b-v2
+# 推薦日文模型：stt_ja_fastconformer_hybrid_large
+# 推薦韓文模型：stt_ko_conformer_ctc_large
+nemo_base_url: "http://nemo-asr:8001"
+nemo_model: "stt_zh_conformer_ctc_large"

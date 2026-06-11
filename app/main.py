@@ -25,6 +25,8 @@ DEFAULT_SRC:   str   = _cfg.get("default_source_lang", "zh-TW")
 DEFAULT_TGT:   str   = _cfg.get("default_target_lang", "en")
 WHISPER_BASE_URL: str = os.environ.get("WHISPER_BASE_URL") or _cfg.get("whisper_base_url", "http://whisper:8000")
 WHISPER_MODEL:    str = _cfg.get("whisper_model", "Systran/faster-whisper-small")
+NEMO_BASE_URL:    str = os.environ.get("NEMO_BASE_URL") or _cfg.get("nemo_base_url", "http://nemo-asr:8001")
+NEMO_MODEL:       str = _cfg.get("nemo_model", "stt_zh_conformer_ctc_large")
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,7 @@ async def api_config():
         "default_source_lang": DEFAULT_SRC,
         "default_target_lang": DEFAULT_TGT,
         "whisper_model":       WHISPER_MODEL,
+        "nemo_model":          NEMO_MODEL,
     }
 
 
@@ -48,16 +51,25 @@ async def api_transcribe(
     audio: UploadFile,
     language: str = Form("zh"),
     model: str | None = Form(None),
+    backend: str = Form("whisper"),  # "whisper" | "nemo"
 ):
-    """Proxy audio file to faster-whisper and return recognised text."""
-    whisper_model = model or WHISPER_MODEL
-    audio_bytes   = await audio.read()
+    """Proxy audio to the selected STT backend (faster-whisper or NeMo) and return text."""
+    if backend == "nemo":
+        base_url  = NEMO_BASE_URL
+        stt_model = model or NEMO_MODEL
+        timeout   = 60
+    else:
+        base_url  = WHISPER_BASE_URL
+        stt_model = model or WHISPER_MODEL
+        timeout   = 30
+
+    audio_bytes = await audio.read()
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
-                f"{WHISPER_BASE_URL}/v1/audio/transcriptions",
+                f"{base_url}/v1/audio/transcriptions",
                 files={"file": (audio.filename or "audio.webm", audio_bytes, audio.content_type or "audio/webm")},
-                data={"model": whisper_model, "language": language, "response_format": "json"},
+                data={"model": stt_model, "language": language, "response_format": "json"},
             )
             resp.raise_for_status()
             return {"text": resp.json().get("text", "").strip()}

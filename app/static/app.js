@@ -474,7 +474,7 @@ function initWhisperMode(stream) {
 
   _startVad();
   setBadge(true);
-  setStatus('🤫 Whisper 監聽中…', 'listening');
+  setStatus((sttMode === 'nemo' ? '🔥 NeMo' : '🤫 Whisper') + ' 監聽中…', 'listening');
 }
 
 function _startVad() {
@@ -533,14 +533,17 @@ async function flushWhisperChunk() {
   const form = new FormData();
   form.append('audio', blob, 'audio.webm');
   form.append('language', WHISPER_LANG[sourceLang] || 'zh');
+  form.append('backend', sttMode === 'nemo' ? 'nemo' : 'whisper');
 
-  setStatus('⏳ Whisper 識別中…');
+  const modeLabel = sttMode === 'nemo' ? 'NeMo' : 'Whisper';
+  const modeIcon  = sttMode === 'nemo' ? '🔥' : '🤫';
+  setStatus(`⏳ ${modeLabel} 識別中…`);
   try {
     const resp = await fetch('/api/transcribe', { method: 'POST', body: form });
     const data = await resp.json();
     if (data.error) { setStatus('識別錯誤：' + data.error, 'error'); return; }
     const text = (data.text || '').trim();
-    if (!text) { setStatus('🤫 Whisper 監聽中…', 'listening'); return; }
+    if (!text) { setStatus(`${modeIcon} ${modeLabel} 監聽中…`, 'listening'); return; }
 
     appendFinal(text);
     document.getElementById('interimText').textContent = '';
@@ -548,7 +551,7 @@ async function flushWhisperChunk() {
       _lastSentText = text;
       triggerTranslation(text);
     } else {
-      setStatus('🤫 Whisper 監聽中…', 'listening');
+      setStatus(`${modeIcon} ${modeLabel} 監聽中…`, 'listening');
     }
   } catch (e) {
     setStatus('識別失敗：' + e.message, 'error');

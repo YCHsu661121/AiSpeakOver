@@ -57,6 +57,26 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - WHISPER_BASE_URL=http://whisper:8000
+      - NEMO_BASE_URL=http://nemo-asr:8001
+
+  # ── NVIDIA NeMo ASR server (opt-in, requires NVIDIA GPU) ─────────────────
+  # Enable with:  docker compose --profile nemo up -d
+  # Build note:   first pull of nvcr.io/nvidia/nemo:24.09.01 is ~20 GB.
+  nemo-asr:
+    profiles: ["nemo"]
+    build: ./nemo-asr
+    volumes:
+      - nemo-models:/root/.cache
+    environment:
+      - NEMO_MODEL=stt_zh_conformer_ctc_large
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   # ── nginx HTTPS reverse proxy ─────────────────────────────────────────────
   nginx:
@@ -84,4 +104,5 @@ volumes:
   ollama-data:     # Ollama 模型持久化
   nginx-certs:     # SSL 憑證持久化
   whisper-models:  # faster-whisper 模型快取
+  nemo-models:     # NeMo / HuggingFace 模型快取
 

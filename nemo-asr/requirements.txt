@@ -1,0 +1,4 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+# NeMo + PyTorch are pre-installed in the nvcr.io/nvidia/nemo base image

@@ -65,9 +65,16 @@ function dbg(msg, level = 'info') {
 function clearDebugLog() { const l = document.getElementById('debugLog'); if (l) l.innerHTML = ''; }
 function toggleDebugPanel() {
   const p = document.getElementById('debugPanel');
-  if (!p) return;
+  if (!p) { console.error('debugPanel not found'); return; }
   p.hidden = !p.hidden;
+  console.log('debugPanel hidden=', p.hidden);
 }
+
+// Wire up debug toggle button via JS (more reliable than inline onclick)
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('debugToggleBtn');
+  if (btn) btn.addEventListener('click', toggleDebugPanel);
+});
 
 // 拖曳 debug 視窗
 (function initDebugDrag() {

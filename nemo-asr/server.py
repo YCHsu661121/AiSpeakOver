@@ -11,6 +11,7 @@ Env vars:
 import os
 import subprocess
 import tempfile
+import traceback  # Add traceback for better error logging
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, UploadFile
@@ -101,6 +102,7 @@ async def transcribe(
         )
         if proc.returncode != 0:
             err = proc.stderr.decode(errors="replace")
+            print(f"[FFmpeg Error] {err}", flush=True)
             return JSONResponse({"error": f"ffmpeg: {err}"}, status_code=500)
 
         try:
@@ -120,4 +122,5 @@ async def transcribe(
                 text = str(item)
             return {"text": text.strip() if isinstance(text, str) else str(text).strip()}
         except Exception as exc:
+            traceback.print_exc()  # Print full traceback to logs
             return JSONResponse({"error": str(exc)}, status_code=500)

@@ -646,8 +646,8 @@ button, select, input, [role="button"] {
 /* ── Debug log panel ─────────────────────────────────────────────────────── */
 #debugToggleBtn {
   position: fixed;
-  bottom: 72px;
-  right: 12px;
+  bottom: 52px;
+  left: 12px;
   width: 38px;
   height: 38px;
   border-radius: 50%;
@@ -666,8 +666,8 @@ button, select, input, [role="button"] {
 
 #debugPanel {
   position: fixed;
-  bottom: 120px;
-  right: 12px;
+  bottom: 100px;
+  left: 12px;
   width: min(480px, calc(100vw - 24px));
   height: 320px;
   background: #111;

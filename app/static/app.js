@@ -704,6 +704,11 @@ async function flushWhisperChunk() {
     const resp = await fetch('/api/transcribe', { method: 'POST', body: form });
     const data = await resp.json();
     if (data.error) { dbg(`transcribe error: ${data.error}`, 'error'); setStatus('識別錯誤：' + data.error, 'error'); return; }
+    if (data.stt_fallback) {
+      dbg(`⚠️ NeMo 失敗，已自動切換到 Whisper (stt_fallback=${data.stt_fallback})`, 'warn');
+      sttMode = 'whisper';
+      document.getElementById('sttToggle').value = 'whisper';
+    }
     const text = (data.text || '').trim();
     dbg(`← transcribe  text="${text}"  speaker_id=${data.speaker_id ?? 'n/a'}`, text ? 'ok' : 'warn');
 
@@ -766,7 +771,15 @@ function setSttMode(mode) {
     if (recognition) try { recognition.stop(); } catch (_) {}
     // Quick health-check so the user knows immediately if the backend isn't running
     checkSttBackend(mode).then(ok => {
-      if (!ok) return;  // error already shown
+      if (!ok) {
+        // Revert to whisper so transcribe calls don't keep hitting a dead NeMo
+        if (mode === 'nemo') {
+          sttMode = 'whisper';
+          document.getElementById('sttToggle').value = 'whisper';
+          dbg('NeMo 不可用，已自動切回 Whisper', 'warn');
+        }
+        return;
+      }
       if (_micStream) initWhisperMode(_micStream);
       else setStatus('麥克風尚未連接', 'error');
     });

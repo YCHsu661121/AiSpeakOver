@@ -95,17 +95,50 @@ async def api_transcribe(
             resp.raise_for_status()
             return int(resp.json().get("speaker_id", 0))
 
+    async def stt_call_with_fallback() -> tuple[str, bool]:
+        """Try primary backend; if NeMo fails, fall back to Whisper. Returns (text, fell_back)."""
+        try:
+            return await stt_call(), False
+        except Exception as exc:
+            if backend == "nemo":
+                # NeMo unavailable — retry with Whisper
+                import logging
+                logging.getLogger(__name__).warning("NeMo failed (%s), falling back to Whisper", exc)
+                fallback_url   = WHISPER_BASE_URL
+                fallback_model = WHISPER_MODEL
+                fallback_timeout = httpx.Timeout(connect=5, read=30, write=10, pool=5)
+                async with httpx.AsyncClient(timeout=fallback_timeout) as client:
+                    stt_data: dict = {"model": fallback_model, "response_format": "json"}
+                    if language:
+                        stt_data["language"] = language
+                    resp = await client.post(
+                        f"{fallback_url}/v1/audio/transcriptions",
+                        files={"file": (filename, audio_bytes, content_type)},
+                        data=stt_data,
+                    )
+                    resp.raise_for_status()
+                    return resp.json().get("text", "").strip(), True
+            raise
+
     try:
         if diarize_req.lower() == "true":
-            results = await asyncio.gather(stt_call(), diarize_call(), return_exceptions=True)
+            stt_task = asyncio.create_task(stt_call_with_fallback())
+            diarize_task = asyncio.create_task(diarize_call())
+            results = await asyncio.gather(stt_task, diarize_task, return_exceptions=True)
             if isinstance(results[0], Exception):
                 return JSONResponse({"error": str(results[0])}, status_code=500)
-            text       = results[0]
+            (text, fell_back) = results[0]
             speaker_id = results[1] if not isinstance(results[1], Exception) else None
-            return {"text": text, "speaker_id": speaker_id}
+            resp_body = {"text": text, "speaker_id": speaker_id}
+            if fell_back:
+                resp_body["stt_fallback"] = "whisper"
+            return resp_body
         else:
-            text = await stt_call()
-            return {"text": text}
+            text, fell_back = await stt_call_with_fallback()
+            resp_body = {"text": text}
+            if fell_back:
+                resp_body["stt_fallback"] = "whisper"
+            return resp_body
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 

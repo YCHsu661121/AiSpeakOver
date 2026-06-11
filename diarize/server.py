@@ -28,21 +28,38 @@ RECLUSTER_N   = int(os.environ.get("RECLUSTER_N",   "10"))  # spectral re-cluste
 # ── Model (lazy load at startup) ──────────────────────────────────────────
 
 _encoder = None
+_encoder_error: str | None = None
 
 
 def _get_encoder():
-    global _encoder
-    if _encoder is None:
-        from resemblyzer import VoiceEncoder
-        print("[Diarize] Loading VoiceEncoder…", flush=True)
+    global _encoder, _encoder_error
+    if _encoder is not None:
+        return _encoder
+    if _encoder_error:
+        raise RuntimeError(_encoder_error)
+    from resemblyzer import VoiceEncoder
+    print("[Diarize] Loading VoiceEncoder…", flush=True)
+    try:
         _encoder = VoiceEncoder()
         print("[Diarize] Model ready.", flush=True)
+    except Exception as exc:
+        _encoder_error = str(exc)
+        print(f"[Diarize] ERROR: {exc}", flush=True)
+        raise
     return _encoder
 
 
 @app.on_event("startup")
 async def startup():
-    _get_encoder()
+    """Load VoiceEncoder in background thread — don't block the event loop."""
+    import asyncio, concurrent.futures
+    loop = asyncio.get_event_loop()
+    def _load():
+        try:
+            _get_encoder()
+        except Exception:
+            pass  # error stored in _encoder_error
+    loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load)
 
 
 # ── Speaker state ─────────────────────────────────────────────────────────
@@ -147,16 +164,21 @@ def _to_wav16k(audio_bytes: bytes, suffix: str) -> Optional[Path]:
 
 @app.get("/health")
 def health():
+    status = "ready" if _encoder is not None else ("error" if _encoder_error else "loading")
     return {
-        "status": "ok",
+        "status": status,
         "n_speakers": len(_tracker.centroids),
         "n_segments": len(_tracker.embeddings),
+        "error": _encoder_error,
     }
 
 
 @app.post("/assign")
 async def assign(audio: UploadFile = File(...)):
     """Return speaker_id (0 or 1) for the submitted audio chunk."""
+    if _encoder is None:
+        msg = f"VoiceEncoder failed: {_encoder_error}" if _encoder_error else "VoiceEncoder still loading"
+        return JSONResponse({"error": msg}, status_code=503)
     mime   = audio.content_type or "audio/webm"
     suffix = ".webm" if "webm" in mime else (".ogg" if "ogg" in mime else ".wav")
     data   = await audio.read()

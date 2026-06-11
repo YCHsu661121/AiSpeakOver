@@ -73,7 +73,7 @@ services:
       - NEMO_BASE_URL=http://nemo-asr:8001
       - DIARIZE_BASE_URL=http://diarize:8002
       # 使用 NeMo profile 時取消注釋下行：
-      - DEFAULT_STT=nemo
+      # - DEFAULT_STT=nemo
 
   # ── NVIDIA NeMo ASR server (opt-in, requires NVIDIA GPU) ─────────────────
   # Enable with:  docker compose --profile nemo up -d

@@ -29,7 +29,7 @@ const STT_LOCALE = {
 const WHISPER_LANG = { 'zh-TW': 'zh', 'zh-CN': 'zh', 'en': 'en', 'ja': 'ja', 'ko': 'ko' };
 
 // Whisper VAD config
-const VOL_THRESHOLD  = 8;      // RMS (0–100) below this = silence
+const VOL_THRESHOLD  = 3;      // RMS (0–100) below this = silence
 const SILENCE_MS     = 1500;   // ms of silence → flush
 const MAX_SPEECH_MS  = 10000;  // ms of continuous speech → force flush
 
@@ -589,12 +589,18 @@ async function flushWhisperChunk() {
       span.textContent = text + ' ';
       speechEl.appendChild(span);
       speechEl.scrollTop = speechEl.scrollHeight;
-      dualTranslate(text, srcLang, tgtLang, document.getElementById('dual-trans-' + sp));
+      if (!currentModel) {
+        setStatus('⚠️ 尚未選擇翻譯模型，請在頂部下拉選單選擇', 'error');
+      } else {
+        dualTranslate(text, srcLang, tgtLang, document.getElementById('dual-trans-' + sp));
+      }
     } else {
       if (!text) { setStatus(`${modeIcon} ${modeLabel} 監聽中…`, 'listening'); return; }
       appendFinal(text);
       document.getElementById('interimText').textContent = '';
-      if (text !== _lastSentText) {
+      if (!currentModel) {
+        setStatus('⚠️ 尚未選擇翻譯模型，請在頂部下拉選單選擇', 'error');
+      } else if (text !== _lastSentText) {
         _lastSentText = text;
         triggerTranslation(text);
       } else {
@@ -633,7 +639,8 @@ function setSttMode(mode) {
 
 // ── Translation (SSE) ──────────────────────────────────────────────────────
 async function triggerTranslation(text) {
-  if (!text.trim() || !currentModel) return;
+  if (!text.trim()) return;
+  if (!currentModel) { setStatus('⚠️ 尚未選擇翻譯模型，請在頂部下拉選單選擇', 'error'); return; }
 
   // Cancel any in-flight request
   if (activeAbort) activeAbort.abort();
@@ -804,7 +811,8 @@ function updateDualLabels() {
 }
 
 async function dualTranslate(text, srcLang, tgtLang, outEl) {
-  if (!text || !currentModel) return;
+  if (!text) return;
+  if (!currentModel) { setStatus('⚠️ 尚未選擇翻譯模型，請在頂部下拉選單選擇', 'error'); return; }
   const block = document.createElement('div');
   block.className = 'trans-block';
   outEl.appendChild(block);

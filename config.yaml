@@ -18,7 +18,7 @@ default_target_lang: "en"
 
 # 預設語音辨識模式：webspeech | whisper | nemo
 # 使用 NeMo profile 時請改為 "nemo"（或設定環境變數 DEFAULT_STT=nemo）
-default_stt: "whisper"
+default_stt: "nemo"
 
 # Whisper STT 服務 (faster-whisper)
 # Docker 內部位址；外部 Whisper 請改為 http://<host>:8000

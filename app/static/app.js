@@ -43,6 +43,10 @@ let _whisperForceTimer= null;   // max-duration force-flush handle
 let _whisperHasSpeech = false;
 let _whisperActive    = false;
 
+let _interimTimer   = null;   // debounce timer for Web Speech
+let _forceTimer     = null;   // max-interval forced flush (3 s)
+let _lastSentText   = '';     // last text sent to translation
+
 // ── Debug log ──────────────────────────────────────────────────────────────
 function dbg(msg, level = 'info') {
   const log = document.getElementById('debugLog');
@@ -466,10 +470,6 @@ function initSpeech() {
     }
     if (!isPulling) setStatus('語音識別錯誤：' + e.error, 'error');
   };
-
-let _interimTimer   = null;   // debounce timer
-let _forceTimer     = null;   // max-interval forced flush (3 s)
-let _lastSentText   = '';     // last text sent to translation
 
   recognition.onresult = e => {
     let interim = '';

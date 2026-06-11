@@ -632,9 +632,29 @@ function setSttMode(mode) {
     clearTimeout(restartTimer);
     restartTimer = null;
     if (recognition) try { recognition.stop(); } catch (_) {}
-    if (_micStream) initWhisperMode(_micStream);
-    else setStatus('麥克風尚未連接', 'error');
+    // Quick health-check so the user knows immediately if the backend isn't running
+    checkSttBackend(mode).then(ok => {
+      if (!ok) return;  // error already shown
+      if (_micStream) initWhisperMode(_micStream);
+      else setStatus('麥克風尚未連接', 'error');
+    });
   }
+}
+
+async function checkSttBackend(mode) {
+  try {
+    const health = await fetch('/api/stt/health').then(r => r.json());
+    if (health[mode] === false) {
+      const label = mode === 'nemo' ? 'NeMo' : 'Whisper';
+      setStatus(
+        `⚠️ ${label} 容器未啟動。` +
+        (mode === 'nemo' ? ' 請以 docker compose --profile nemo up -d 重新啟動。' : ''),
+        'error'
+      );
+      return false;
+    }
+  } catch (_) { /* health endpoint unreachable — let the transcribe call fail naturally */ }
+  return true;
 }
 
 // ── Translation (SSE) ──────────────────────────────────────────────────────

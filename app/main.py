@@ -63,11 +63,11 @@ async def api_transcribe(
     if backend == "nemo":
         base_url  = NEMO_BASE_URL
         stt_model = model or NEMO_MODEL
-        timeout   = 60
+        timeout   = httpx.Timeout(connect=5, read=60, write=10, pool=5)
     else:
         base_url  = WHISPER_BASE_URL
         stt_model = model or WHISPER_MODEL
-        timeout   = 30
+        timeout   = httpx.Timeout(connect=5, read=30, write=10, pool=5)
 
     audio_bytes  = await audio.read()
     filename     = audio.filename or "audio.webm"
@@ -119,6 +119,20 @@ async def api_diarize_reset():
             return resp.json()
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/stt/health")
+async def api_stt_health():
+    """Quick reachability check for each STT backend (3 s connect timeout)."""
+    results: dict = {}
+    async with httpx.AsyncClient(timeout=3) as client:
+        for name, url in [("whisper", WHISPER_BASE_URL), ("nemo", NEMO_BASE_URL)]:
+            try:
+                r = await client.get(f"{url}/health")
+                results[name] = r.status_code < 500
+            except Exception:
+                results[name] = False
+    return results
 
 
 @app.get("/api/models")

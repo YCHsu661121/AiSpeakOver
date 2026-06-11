@@ -73,6 +73,21 @@ async def api_transcribe(
     filename     = audio.filename or "audio.webm"
     content_type = audio.content_type or "audio/webm"
 
+    # Normalize content-type: strip codec suffix (e.g. "audio/webm;codecs=opus" → "audio/webm")
+    # and map to a clean MIME + matching filename that faster-whisper-server can decode.
+    base_mime = content_type.split(";")[0].strip().lower()
+    _MIME_TO_EXT = {
+        "audio/webm":  ".webm",
+        "audio/ogg":   ".ogg",
+        "audio/mp4":   ".mp4",
+        "audio/mpeg":  ".mp3",
+        "audio/wav":   ".wav",
+        "audio/flac":  ".flac",
+    }
+    ext = _MIME_TO_EXT.get(base_mime, ".webm")
+    filename     = "audio" + ext
+    content_type = base_mime
+
     async def stt_call() -> str:
         async with httpx.AsyncClient(timeout=timeout) as client:
             stt_data: dict = {"model": stt_model, "response_format": "json"}

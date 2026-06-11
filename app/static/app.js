@@ -116,8 +116,10 @@ async function loadConfig() {
     sourceLang   = cfg.default_source_lang || 'zh-TW';
     targetLang   = cfg.default_target_lang || 'en';
     currentModel = cfg.default_model       || '';
+    sttMode      = cfg.default_stt         || 'whisper';
     document.getElementById('sourceLang').value = sourceLang;
     document.getElementById('targetLang').value = targetLang;
+    document.getElementById('sttToggle').value  = sttMode;
     updateLangLabels();
   } catch (e) {
     setStatus('無法載入設定：' + e.message, 'error');
@@ -278,6 +280,17 @@ function setupControls() {
     restartListening();
   });
   document.getElementById('sttToggle').addEventListener('change', e => setSttMode(e.target.value));
+  document.getElementById('modeToggle').addEventListener('click', toggleDualMode);
+  document.getElementById('dualLangA').addEventListener('change', e => {
+    dualSpeaker.a.lang = e.target.value;
+    updateDualLabels();
+  });
+  document.getElementById('dualLangB').addEventListener('change', e => {
+    dualSpeaker.b.lang = e.target.value;
+    updateDualLabels();
+  });
+  document.getElementById('pttA').addEventListener('click', () => togglePtt('a'));
+  document.getElementById('pttB').addEventListener('click', () => togglePtt('b'));
 }
 
 function updateLangLabels() {
@@ -307,6 +320,7 @@ function initSpeech() {
 
   recognition.onend = () => {
     isListening = false;
+    if (dualMode) { setBadge(false); return; }  // dual mode handles its own state
     setBadge(false);
     // Auto-restart after brief pause
     if (!restartTimer) {
@@ -339,6 +353,23 @@ let _lastSentText   = '';     // last text sent to translation
       const t = e.results[i][0].transcript;
       if (e.results[i].isFinal) finals  += t;
       else                       interim += t;
+    }
+
+    // ── Dual-mode routing ─────────────────────────────────────────────────
+    if (dualMode && _dualActiveSpeaker) {
+      const sp = _dualActiveSpeaker;
+      if (finals) {
+        const speechEl = document.getElementById('dual-speech-' + sp);
+        const span = document.createElement('span');
+        span.className = 'sentence';
+        span.textContent = finals + ' ';
+        speechEl.appendChild(span);
+        speechEl.scrollTop = speechEl.scrollHeight;
+        const tgtLang = sp === 'a' ? dualSpeaker.b.lang : dualSpeaker.a.lang;
+        dualTranslate(finals, dualSpeaker[sp].lang, tgtLang,
+                      document.getElementById('dual-trans-' + sp));
+      }
+      return;  // don't fall through to single-mode logic
     }
 
     document.getElementById('interimText').textContent = interim;
@@ -665,4 +696,186 @@ function setStatus(msg, type = '') {
   const bar = document.getElementById('statusBar');
   bar.textContent = msg;
   bar.className   = 'statusbar ' + type;
+}
+
+// ── Dual-speaker mode ─────────────────────────────────────────────────────
+
+const LANG_LABELS_DUAL = {
+  'zh-TW': '中文（繁體）', 'zh-CN': '中文（简体）',
+  'en': 'English', 'ja': '日本語', 'ko': '한국어',
+};
+
+function toggleDualMode() {
+  dualMode = !dualMode;
+  document.getElementById('panelsSingle').hidden  =  dualMode;
+  document.getElementById('panelsDual').hidden    = !dualMode;
+  document.getElementById('langPairSingle').style.display = dualMode ? 'none' : '';
+  document.getElementById('modeToggle').classList.toggle('active', dualMode);
+  document.getElementById('modeToggle').textContent = dualMode ? '⇌ 單人' : '⇌ 雙向';
+
+  if (dualMode) {
+    // Stop single-speaker recognition
+    clearTimeout(restartTimer); restartTimer = null;
+    if (recognition) try { recognition.stop(); } catch (_) {}
+    stopWhisperMode();
+    updateDualLabels();
+    setStatus('雙向模式：按下說話鍵開始', 'listening');
+  } else {
+    stopDualPtt();
+    // Resume single-speaker mode
+    if (sttMode === 'whisper' || sttMode === 'nemo') {
+      if (_micStream) initWhisperMode(_micStream);
+    } else {
+      startListening();
+    }
+  }
+}
+
+function updateDualLabels() {
+  document.getElementById('dualTgtLabelA').textContent =
+    LANG_LABELS_DUAL[dualSpeaker.b.lang] || dualSpeaker.b.lang;
+  document.getElementById('dualTgtLabelB').textContent =
+    LANG_LABELS_DUAL[dualSpeaker.a.lang] || dualSpeaker.a.lang;
+
+  const lblA = LANG_LABELS_DUAL[dualSpeaker.a.lang] || dualSpeaker.a.lang;
+  const lblB = LANG_LABELS_DUAL[dualSpeaker.b.lang] || dualSpeaker.b.lang;
+  document.getElementById('pttA').textContent = `🎤 ${lblA} 說話`;
+  document.getElementById('pttB').textContent = `🎤 ${lblB} 說話`;
+}
+
+function togglePtt(speaker) {
+  if (_dualActiveSpeaker === speaker) {
+    stopDualPtt();
+  } else {
+    if (_dualActiveSpeaker) stopDualPtt();
+    startDualPtt(speaker);
+  }
+}
+
+function startDualPtt(speaker) {
+  _dualActiveSpeaker = speaker;
+  const btn = document.getElementById('ptt' + speaker.toUpperCase());
+  btn.classList.add('active');
+  const lbl = LANG_LABELS_DUAL[dualSpeaker[speaker].lang] || dualSpeaker[speaker].lang;
+  btn.textContent = `🔴 ${lbl} 錄音中…`;
+  setStatus(`🎤 ${lbl} 錄音中…`, 'listening');
+
+  if (sttMode === 'webspeech') {
+    // Use Web Speech — set language and start
+    if (recognition) {
+      recognition.lang = STT_LOCALE[dualSpeaker[speaker].lang] || dualSpeaker[speaker].lang;
+      try { recognition.start(); } catch (_) {}
+    }
+  } else {
+    // Whisper / NeMo — use MediaRecorder
+    if (!_micStream) { setStatus('麥克風尚未連接', 'error'); return; }
+    _dualChunks   = [];
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+      .find(m => MediaRecorder.isTypeSupported(m)) || '';
+    _dualRecorder = new MediaRecorder(_micStream, mime ? { mimeType: mime } : undefined);
+    _dualRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) _dualChunks.push(e.data); };
+    _dualRecorder.start(200);
+  }
+}
+
+async function stopDualPtt() {
+  if (!_dualActiveSpeaker) return;
+  const sp  = _dualActiveSpeaker;
+  _dualActiveSpeaker = null;
+
+  const btn = document.getElementById('ptt' + sp.toUpperCase());
+  btn.classList.remove('active');
+  updateDualLabels();
+
+  if (sttMode === 'webspeech') {
+    if (recognition) try { recognition.stop(); } catch (_) {}
+    return;
+  }
+
+  // Flush Whisper / NeMo
+  if (!_dualRecorder) return;
+  _dualRecorder.stop();
+  _dualRecorder = null;
+
+  const chunks = [..._dualChunks];
+  _dualChunks = [];
+  if (chunks.length === 0) return;
+
+  const mimeType = 'audio/webm';
+  const blob = new Blob(chunks, { type: mimeType });
+  if (blob.size < 500) return;
+
+  const lang = dualSpeaker[sp].lang;
+  const tgtLang = sp === 'a' ? dualSpeaker.b.lang : dualSpeaker.a.lang;
+  const speechEl = document.getElementById('dual-speech-' + sp);
+  const transEl  = document.getElementById('dual-trans-' + sp);
+
+  setStatus('⏳ 辨識中…');
+  const form = new FormData();
+  form.append('audio', blob, 'audio.webm');
+  form.append('language', WHISPER_LANG[lang] || 'zh');
+  form.append('backend',  sttMode === 'nemo' ? 'nemo' : 'whisper');
+
+  try {
+    const resp = await fetch('/api/transcribe', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (data.error) { setStatus('辨識錯誤：' + data.error, 'error'); return; }
+    const text = (data.text || '').trim();
+    if (!text) { setStatus('雙向模式：按下說話鍵開始', 'listening'); return; }
+
+    const span = document.createElement('span');
+    span.className = 'sentence';
+    span.textContent = text + ' ';
+    speechEl.appendChild(span);
+    speechEl.scrollTop = speechEl.scrollHeight;
+
+    dualTranslate(text, lang, tgtLang, transEl);
+  } catch (e) {
+    setStatus('辨識失敗：' + e.message, 'error');
+  }
+}
+
+async function dualTranslate(text, srcLang, tgtLang, outEl) {
+  if (!text || !currentModel) return;
+  const block = document.createElement('div');
+  block.className = 'trans-block';
+  outEl.appendChild(block);
+  outEl.scrollTop = outEl.scrollHeight;
+  setStatus('⏳ 翻譯中…');
+
+  const ctrl = new AbortController();
+  try {
+    const resp = await fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, source_lang: srcLang, target_lang: tgtLang, model: currentModel }),
+      signal: ctrl.signal,
+    });
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6);
+        if (payload === '[DONE]') break;
+        try {
+          const parsed = JSON.parse(payload);
+          if (parsed.content) { block.textContent += parsed.content; outEl.scrollTop = outEl.scrollHeight; }
+        } catch (_) {}
+      }
+    }
+    setStatus('雙向模式：按下說話鍵開始', 'listening');
+  } catch (e) {
+    if (e.name !== 'AbortError') setStatus('翻譯失敗：' + e.message, 'error');
+  }
+}
+
+function clearDual(sp) {
+  document.getElementById('dual-speech-' + sp).innerHTML = '';
+  document.getElementById('dual-trans-'  + sp).innerHTML = '';
 }

@@ -18,8 +18,8 @@
       <div class="brand">🎙 AiSpeakOver</div>
 
       <div class="controls">
-        <!-- Language pair -->
-        <div class="lang-pair">
+        <!-- Language pair (hidden in dual mode) -->
+        <div class="lang-pair" id="langPairSingle">
           <select id="sourceLang">
             <option value="zh-TW">中文（繁體）</option>
             <option value="zh-CN">中文（简体）</option>
@@ -49,6 +49,9 @@
           <option value="nemo">🔥 NeMo (NVIDIA)</option>
         </select>
 
+        <!-- Dual mode toggle -->
+        <button id="modeToggle" title="切換雙向模式">&#x21c4; 雙向</button>
+
         <!-- Mic indicator -->
         <div class="mic-badge" id="micBadge">
           <span class="dot"></span>
@@ -57,8 +60,8 @@
       </div>
     </header>
 
-    <!-- ── Panels ──────────────────────────────────────────── -->
-    <main class="panels">
+    <!-- ── Single-speaker panels ─────────────────────────── -->
+    <main class="panels" id="panelsSingle">
 
       <!-- Left: speech -->
       <div class="panel" id="panelSrc">
@@ -91,6 +94,62 @@
           <button class="btn-ghost" onclick="copyResult()">複製</button>
         </div>
       </div>
+    </main>
+
+    <!-- ── Dual-speaker panels (hidden until mode toggle) ─── -->
+    <main class="panels dual-panels" id="panelsDual" hidden>
+
+      <!-- Speaker A -->
+      <div class="dual-col" id="dualColA">
+        <div class="dual-head">
+          <select id="dualLangA">
+            <option value="zh-TW">中文（繁體）</option>
+            <option value="zh-CN">中文（简体）</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+          </select>
+          <span class="dual-arrow">→</span>
+          <span class="dual-tgt-label" id="dualTgtLabelA">English</span>
+        </div>
+        <button class="ptt-btn" id="pttA">🎤 中文（繁體）說話</button>
+        <div class="dual-body">
+          <div class="dual-speech" id="dual-speech-a"></div>
+          <div class="dual-divider-label">↓ 翻譯</div>
+          <div class="dual-trans" id="dual-trans-a"></div>
+        </div>
+        <div class="dual-foot">
+          <button class="btn-ghost" onclick="clearDual('a')">&#x1F9F9; 清除</button>
+        </div>
+      </div>
+
+      <!-- Center divider -->
+      <div class="dual-center-divider"></div>
+
+      <!-- Speaker B -->
+      <div class="dual-col" id="dualColB">
+        <div class="dual-head">
+          <select id="dualLangB">
+            <option value="en" selected>English</option>
+            <option value="zh-TW">中文（繁體）</option>
+            <option value="zh-CN">中文（简体）</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+          </select>
+          <span class="dual-arrow">→</span>
+          <span class="dual-tgt-label" id="dualTgtLabelB">中文（繁體）</span>
+        </div>
+        <button class="ptt-btn" id="pttB">🎤 English 說話</button>
+        <div class="dual-body">
+          <div class="dual-speech" id="dual-speech-b"></div>
+          <div class="dual-divider-label">↓ 翻譯</div>
+          <div class="dual-trans" id="dual-trans-b"></div>
+        </div>
+        <div class="dual-foot">
+          <button class="btn-ghost" onclick="clearDual('b')">&#x1F9F9; 清除</button>
+        </div>
+      </div>
+
     </main>
 
     <!-- ── Status bar ──────────────────────────────────────── -->

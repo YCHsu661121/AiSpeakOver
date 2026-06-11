@@ -9,7 +9,7 @@ flowchart TD
     subgraph Browser["瀏覽器"]
         UI["Web UI\n(HTML / CSS / JS)"]
         WS["🌐 Web Speech API\n即時串流辨識"]
-        MR["🎙 MediaRecorder\n分段錄音 (VAD)"]
+        MR["🎙 MediaRecorder\n分段錄音 (PTT / VAD)"]
         UI -- "WebSpeech 模式" --> WS
         UI -- "Whisper / NeMo 模式" --> MR
     end
@@ -44,6 +44,7 @@ flowchart TD
   - **🌐 Web Speech**（瀏覽器原生，低延遲，需網路）
   - **🤫 Whisper 本地**（faster-whisper，完全離線，中日韓準確度更高）
   - **🔥 NeMo (NVIDIA)**（NVIDIA NeMo，GPU 加速，最高準確度）
+- **⇌ 雙向翻譯模式**：兩人各按自己的說話鍵，辨識結果與翻譯即時顯示在同一頁面
 - Ollama 本地 LLM 串流翻譯，不需要雲端 API
 - 支援 5 種語言互譯：繁體中文、簡體中文、English、日本語、한국어
 - UI 直接切換模型 / 從 Ollama library 下載模型
@@ -57,7 +58,30 @@ flowchart TD
 | 🤫 Whisper 本地 | 稍高（每句傳送） | 是 | CPU | 任何支援 MediaRecorder |
 | 🔥 NeMo (NVIDIA) | 低（GPU 加速） | 是 | NVIDIA GPU | 任何支援 MediaRecorder |
 
-切換方式：右上角下拉選單。Whisper / NeMo 均以無聲偵測（VAD）為分段依據：靜音 1.5 秒後自動送出辨識。
+切換方式：右上角 STT 下拉選單。Whisper / NeMo 均以 **PTT（按住說話）** 為觸發依據；單人模式另有 VAD 自動分段。
+
+**預設值：**
+- 標準部署（CPU）：預設 **Whisper 本地**
+- NeMo profile 部署：在 `config.yaml` 設定 `default_stt: "nemo"` 或加環境變數 `DEFAULT_STT=nemo`
+
+## 雙向翻譯模式
+
+點擊右上角 **⇌ 雙向** 按鈕切換。
+
+```
+┌─────────────────────┬─────────────────────┐
+│  說話者 A           │  說話者 B           │
+│  [語言選擇]  → B語  │  [語言選擇]  → A語  │
+│  🎤 A說話（按此）   │  🎤 B說話（按此）   │
+│  ─ 辨識文字 ─       │  ─ 辨識文字 ─       │
+│  ↓ 翻譯             │  ↓ 翻譯             │
+│  ─ 翻譯結果 ─       │  ─ 翻譯結果 ─       │
+└─────────────────────┴─────────────────────┘
+```
+
+- 每次只有一人可錄音，再按一次停止
+- 結束後自動送出辨識 → 翻譯，結果顯示在同一欄
+- 支援全部三種 STT 模式（Web Speech / Whisper / NeMo）
 
 ## 快速開始
 

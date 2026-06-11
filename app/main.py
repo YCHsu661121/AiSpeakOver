@@ -27,6 +27,7 @@ WHISPER_BASE_URL: str = os.environ.get("WHISPER_BASE_URL") or _cfg.get("whisper_
 WHISPER_MODEL:    str = _cfg.get("whisper_model", "Systran/faster-whisper-small")
 NEMO_BASE_URL:    str = os.environ.get("NEMO_BASE_URL") or _cfg.get("nemo_base_url", "http://nemo-asr:8001")
 NEMO_MODEL:       str = _cfg.get("nemo_model", "stt_zh_conformer_ctc_large")
+DEFAULT_STT:      str = os.environ.get("DEFAULT_STT") or _cfg.get("default_stt", "whisper")
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ async def api_config():
         "default_target_lang": DEFAULT_TGT,
         "whisper_model":       WHISPER_MODEL,
         "nemo_model":          NEMO_MODEL,
+        "default_stt":         DEFAULT_STT,
     }
 
 

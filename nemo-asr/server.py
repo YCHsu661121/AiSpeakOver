@@ -20,30 +20,48 @@ app = FastAPI(title="NeMo ASR Server")
 
 MODEL_NAME: str = os.environ.get("NEMO_MODEL", "stt_zh_conformer_ctc_large")
 _model = None
+_model_error: str | None = None  # set if loading failed
 
 
 def get_model():
-    global _model
+    global _model, _model_error
     if _model is not None:
         return _model
+    if _model_error:
+        raise RuntimeError(_model_error)
 
     import nemo.collections.asr as nemo_asr  # deferred – heavy import
 
     print(f"[NeMo] Loading model: {MODEL_NAME}", flush=True)
-    _model = nemo_asr.models.ASRModel.from_pretrained(MODEL_NAME)
-    _model.eval()
-    print("[NeMo] Model ready.", flush=True)
+    try:
+        _model = nemo_asr.models.ASRModel.from_pretrained(MODEL_NAME)
+        _model.eval()
+        print("[NeMo] Model ready.", flush=True)
+    except Exception as exc:
+        _model_error = str(exc)
+        print(f"[NeMo] ERROR loading model: {exc}", flush=True)
+        raise
     return _model
 
 
 @app.on_event("startup")
 async def on_startup():
-    get_model()
+    """Warm up model in background — don’t block/crash server if it fails."""
+    import asyncio
+    import concurrent.futures
+    loop = asyncio.get_event_loop()
+    def _load():
+        try:
+            get_model()
+        except Exception:
+            pass  # error already stored in _model_error; /health will report it
+    loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load)
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": MODEL_NAME}
+    status = "ready" if _model is not None else ("error" if _model_error else "loading")
+    return {"status": status, "model": MODEL_NAME, "error": _model_error}
 
 
 @app.post("/v1/audio/transcriptions")
@@ -53,6 +71,18 @@ async def transcribe(
     language: str = Form("zh"),
     response_format: str = Form("json"),
 ):
+    # Fail fast with a clear message if model is still loading or failed
+    if _model is None:
+        if _model_error:
+            return JSONResponse(
+                {"error": f"NeMo model failed to load: {_model_error}"},
+                status_code=503,
+            )
+        return JSONResponse(
+            {"error": f"NeMo model '{MODEL_NAME}' is still loading, please retry in a moment"},
+            status_code=503,
+        )
+
     audio_bytes = await file.read()
     suffix = Path(file.filename or "audio.webm").suffix or ".webm"
 

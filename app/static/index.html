@@ -189,6 +189,32 @@
     </div>
   </div>
 
+  <!-- ── Debug log panel ───────────────────────────────────── -->
+  <div id="debugToggleBtn" title="Debug Log" onclick="toggleDebugPanel()">&#x1F41E;</div>
+  <div id="debugPanel" hidden>
+    <div class="debug-header">
+      <span>🐞 Debug Log</span>
+      <div class="debug-actions">
+        <button onclick="clearDebugLog()">🧹</button>
+        <button onclick="toggleDebugPanel()">&#x2715;</button>
+      </div>
+    </div>
+    <div id="debugLog"></div>
+  </div>
+
+  <!-- ── Debug log panel ───────────────────────────────────── -->
+  <div id="debugToggleBtn" title="Debug Log" onclick="toggleDebugPanel()">🐞</div>
+  <div id="debugPanel" hidden>
+    <div class="debug-header">
+      <span>🐞 Debug Log</span>
+      <div class="debug-actions">
+        <button onclick="clearDebugLog()">🧹</button>
+        <button onclick="toggleDebugPanel()">&#x2715;</button>
+      </div>
+    </div>
+    <div id="debugLog"></div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

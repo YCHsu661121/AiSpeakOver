@@ -129,9 +129,20 @@ async def api_stt_health():
         for name, url in [("whisper", WHISPER_BASE_URL), ("nemo", NEMO_BASE_URL)]:
             try:
                 r = await client.get(f"{url}/health")
-                results[name] = r.status_code < 500
-            except Exception:
+                body = r.json()
+                # NeMo reports status: "ready" | "loading" | "error"
+                # Whisper reports HTTP 200 = healthy
+                if name == "nemo":
+                    results[name] = body.get("status") == "ready"
+                    results["nemo_status"] = body.get("status", "unknown")
+                    if body.get("error"):
+                        results["nemo_error"] = body["error"]
+                else:
+                    results[name] = r.status_code < 500
+            except Exception as exc:
                 results[name] = False
+                if name == "nemo":
+                    results["nemo_status"] = f"unreachable: {exc}"
     return results
 
 

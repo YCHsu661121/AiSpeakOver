@@ -42,6 +42,27 @@ let _whisperForceTimer= null;   // max-duration force-flush handle
 let _whisperHasSpeech = false;
 let _whisperActive    = false;
 
+// ── Debug log ──────────────────────────────────────────────────────────────
+function dbg(msg, level = 'info') {
+  const log = document.getElementById('debugLog');
+  if (!log) return;
+  const row  = document.createElement('div');
+  row.className = 'dbg-row';
+  const now  = new Date();
+  const ts   = now.toTimeString().slice(0, 8) + '.' + String(now.getMilliseconds()).padStart(3, '0');
+  row.innerHTML =
+    `<span class="dbg-time">${ts}</span>` +
+    `<span class="dbg-tag ${level}">${level.toUpperCase()}</span>` +
+    `<span class="dbg-msg">${String(msg).replace(/</g, '&lt;')}</span>`;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+function clearDebugLog() { const l = document.getElementById('debugLog'); if (l) l.innerHTML = ''; }
+function toggleDebugPanel() {
+  const p = document.getElementById('debugPanel');
+  if (p) p.hidden = !p.hidden;
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await loadConfig();
@@ -117,6 +138,7 @@ async function loadConfig() {
     targetLang   = cfg.default_target_lang || 'en';
     currentModel = cfg.default_model       || '';
     sttMode      = cfg.default_stt         || 'whisper';
+    dbg(`config loaded: stt=${sttMode}  model=${currentModel}  ${cfg.default_source_lang}→${cfg.default_target_lang}`, 'ok');
     document.getElementById('sourceLang').value = sourceLang;
     document.getElementById('targetLang').value = targetLang;
     document.getElementById('sttToggle').value  = sttMode;
@@ -559,7 +581,7 @@ async function flushWhisperChunk() {
 
   const mimeType = _whisperRecorder?.mimeType || 'audio/webm';
   const blob = new Blob(chunks, { type: mimeType });
-  if (blob.size < 1000) return;  // too small → noise, skip
+  if (blob.size < 1000) { dbg(`blob too small (${blob.size}B), skip`, 'warn'); return; }
 
   const form = new FormData();
   form.append('audio', blob, 'audio.webm');
@@ -570,18 +592,21 @@ async function flushWhisperChunk() {
 
   const modeLabel = sttMode === 'nemo' ? 'NeMo' : 'Whisper';
   const modeIcon  = sttMode === 'nemo' ? '🔥' : '🤫';
+  dbg(`→ POST /api/transcribe  backend=${sttMode}  size=${blob.size}B  dual=${dualMode}`, 'info');
   setStatus(`⏳ ${modeLabel} 識別中…`);
   try {
     const resp = await fetch('/api/transcribe', { method: 'POST', body: form });
     const data = await resp.json();
-    if (data.error) { setStatus('識別錯誤：' + data.error, 'error'); return; }
+    if (data.error) { dbg(`transcribe error: ${data.error}`, 'error'); setStatus('識別錯誤：' + data.error, 'error'); return; }
     const text = (data.text || '').trim();
+    dbg(`← transcribe  text="${text}"  speaker_id=${data.speaker_id ?? 'n/a'}`, text ? 'ok' : 'warn');
 
     if (dualMode) {
       if (!text) { setStatus('🟢 講者辨識中…', 'listening'); return; }
       const sp      = (data.speaker_id ?? 0) === 0 ? 'a' : 'b';
       const srcLang = dualSpeaker[sp].lang;
       const tgtLang = sp === 'a' ? dualSpeaker.b.lang : dualSpeaker.a.lang;
+      dbg(`講者 ${sp.toUpperCase()}  src=${srcLang}  tgt=${tgtLang}`, 'info');
       updateSpkBadge(sp);
       const speechEl = document.getElementById('dual-speech-' + sp);
       const span = document.createElement('span');
@@ -608,6 +633,7 @@ async function flushWhisperChunk() {
       }
     }
   } catch (e) {
+    dbg(`transcribe fetch failed: ${e.message}`, 'error');
     setStatus('識別失敗：' + e.message, 'error');
   }
 }
@@ -644,8 +670,18 @@ function setSttMode(mode) {
 async function checkSttBackend(mode) {
   try {
     const health = await fetch('/api/stt/health').then(r => r.json());
+    const status = mode === 'nemo' ? (health.nemo_status || (health.nemo ? 'ready' : 'unreachable')) : (health.whisper ? 'ready' : 'unreachable');
+    dbg(`stt/health ← ${mode}=${status}${health.nemo_error ? '  err:' + health.nemo_error : ''}`, health[mode] ? 'ok' : 'warn');
     if (health[mode] === false) {
       const label = mode === 'nemo' ? 'NeMo' : 'Whisper';
+      if (mode === 'nemo' && health.nemo_status === 'loading') {
+        setStatus('⏳ NeMo 模型載入中，請稍後再試…', 'listening');
+        return false;
+      }
+      if (mode === 'nemo' && health.nemo_error) {
+        setStatus(`⚠️ NeMo 模型載入失敗：${health.nemo_error}`, 'error');
+        return false;
+      }
       setStatus(
         `⚠️ ${label} 容器未啟動。` +
         (mode === 'nemo' ? ' 請以 docker compose --profile nemo up -d 重新啟動。' : ''),
@@ -661,6 +697,7 @@ async function checkSttBackend(mode) {
 async function triggerTranslation(text) {
   if (!text.trim()) return;
   if (!currentModel) { setStatus('⚠️ 尚未選擇翻譯模型，請在頂部下拉選單選擇', 'error'); return; }
+  dbg(`→ translate  model=${currentModel}  ${sourceLang}→${targetLang}  "${text.slice(0,60)}"`, 'info');
 
   // Cancel any in-flight request
   if (activeAbort) activeAbort.abort();
@@ -712,6 +749,7 @@ async function triggerTranslation(text) {
 
     setStatus('🎙 正在監聽…', 'listening');
   } catch (e) {
+    dbg(`translate error: ${e.message}`, 'error');
     if (e.name !== 'AbortError') setStatus('翻譯失敗：' + e.message, 'error');
   }
 }

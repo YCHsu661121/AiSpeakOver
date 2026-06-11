@@ -1,0 +1,87 @@
+services:
+
+  # ── Ollama LLM server ─────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    # GPU support (uncomment if you have NVIDIA GPU + nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ── Pull default model on first start ─────────────────────────────────────
+  ollama-init:
+    image: ollama/ollama
+    depends_on:
+      - ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    restart: "no"
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama...' &&
+        until wget -qO- http://ollama:11434/api/tags > /dev/null 2>&1; do sleep 2; done &&
+        echo 'Pulling model...' &&
+        ollama pull qwen2.5:1.5b &&
+        echo 'Done.'
+      "
+
+  # ── faster-whisper STT server ────────────────────────────────────────────
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    volumes:
+      - whisper-models:/root/.cache/huggingface
+    environment:
+      - WHISPER__MODEL=Systran/faster-whisper-small
+    restart: unless-stopped
+
+  # ── FastAPI app ───────────────────────────────────────────────────────────
+  aispeakover:
+    build: .
+    expose:
+      - "8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - whisper
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WHISPER_BASE_URL=http://whisper:8000
+
+  # ── nginx HTTPS reverse proxy ─────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "4444:80"    # HTTP → 自動導向 HTTPS
+      - "4445:443"   # HTTPS（麥克風需要此 port）
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginx-certs:/etc/nginx/certs
+    depends_on:
+      - aispeakover
+    restart: unless-stopped
+    command: >
+      sh -c "
+        if [ ! -f /etc/nginx/certs/server.crt ]; then
+          apk add --no-cache openssl &&
+          mkdir -p /etc/nginx/certs &&
+          openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /etc/nginx/certs/server.key -out /etc/nginx/certs/server.crt -subj '/CN=ai/O=AiSpeakOver' -addext 'subjectAltName=DNS:ai,DNS:localhost,IP:127.0.0.1';
+        fi &&
+        nginx -g 'daemon off;'
+      "
+
+volumes:
+  ollama-data:     # Ollama 模型持久化
+  nginx-certs:     # SSL 憑證持久化
+  whisper-models:  # faster-whisper 模型快取
+

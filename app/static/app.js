@@ -62,7 +62,7 @@ function clearDebugLog() { const l = document.getElementById('debugLog'); if (l)
 function toggleDebugPanel() {
   const p = document.getElementById('debugPanel');
   if (!p) return;
-  p.style.display = (p.style.display === 'none') ? 'flex' : 'none';
+  p.hidden = !p.hidden;
 }
 
 // 拖曳 debug 視窗
@@ -95,16 +95,14 @@ function toggleDebugPanel() {
 document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.shiftKey && e.key === 'D') {
     e.preventDefault();
-    const p = document.getElementById('debugPanel');
-    if (p) p.hidden = !p.hidden;
+    toggleDebugPanel();
   }
 });
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  // Force debug panel visible
-  const dbgPanel = document.getElementById('debugPanel');
-  if (dbgPanel) { dbgPanel.removeAttribute('hidden'); dbgPanel.style.display = 'flex'; }
+  // Debug panel starts hidden; user opens via button or Ctrl+Shift+D
+  // (do NOT force-open here)
 
   await loadConfig();
   await loadModels();

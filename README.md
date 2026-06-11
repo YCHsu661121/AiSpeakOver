@@ -20,6 +20,7 @@ flowchart TD
         OLLAMA["Ollama\nLLM 推論\n:11434"]
         WHISPER["faster-whisper\nCPU STT\n:8000 內部"]
         NEMO["🔥 NeMo ASR\nNVIDIA GPU STT\n:8001 內部\n(--profile nemo)"]
+        DIARIZE["🗣 Diarize\nresemblyzer + spectralcluster\n:8002 內部"]
     end
 
     WS -- "辨識結果文字" --> UI
@@ -28,9 +29,11 @@ flowchart TD
     NGINX --> API
     API -- "backend=whisper" --> WHISPER
     API -- "backend=nemo" --> NEMO
+    API -- "diarize=true\n並行執行" --> DIARIZE
     API -- "Ollama chat API\n串流" --> OLLAMA
     WHISPER -- "辨識文字" --> API
     NEMO -- "辨識文字" --> API
+    DIARIZE -- "speaker_id" --> API
     OLLAMA -- "翻譯結果 SSE" --> API
     API -- "翻譯結果 SSE" --> NGINX
     NGINX -- "HTTPS" --> Browser
@@ -44,7 +47,11 @@ flowchart TD
   - **🌐 Web Speech**（瀏覽器原生，低延遲，需網路）
   - **🤫 Whisper 本地**（faster-whisper，完全離線，中日韓準確度更高）
   - **🔥 NeMo (NVIDIA)**（NVIDIA NeMo，GPU 加速，最高準確度）
-- **⇌ 雙向翻譯模式**：兩人各按自己的說話鍵，辨識結果與翻譯即時顯示在同一頁面
+- **⇌ 雙向翻譯模式**（自動講者辨識）：
+  - 不需按鈕，透過 **resemblyzer GE2E** 營造聲紋実現自動講者分別
+  - **spectralcluster** 定期重新核算特徵展，提升辨識穩定性
+  - 講者 A / B 辨識結果與翻譯分剛左右面板即時顯示
+  - STT 與講者辨識並行執行，回應延遲最小化
 - Ollama 本地 LLM 串流翻譯，不需要雲端 API
 - 支援 5 種語言互譯：繁體中文、簡體中文、English、日本語、한국어
 - UI 直接切換模型 / 從 Ollama library 下載模型
@@ -211,14 +218,18 @@ ollama_base_url: "http://<host>:11434"
 
 ```
 ├── config.yaml          # 主要設定檔
-├── docker-compose.yml   # 容器編排（ollama / whisper / nemo-asr / aispeakover / nginx）
+├── docker-compose.yml   # 容器編排（ollama / whisper / diarize / nemo-asr / aispeakover / nginx）
 ├── Dockerfile           # FastAPI 映像
 ├── app/
-│   ├── main.py          # FastAPI 後端（翻譯 API + 辨識代理 + 靜態檔案）
+│   ├── main.py          # FastAPI 後端（翻譯 API + 辨識代理 + 雙向講者重設）
 │   ├── requirements.txt
 │   └── static/          # 前端（HTML / CSS / JS）
+├── diarize/
+│   ├── server.py        # 講者辨識服務（resemblyzer + spectralcluster）
+│   ├── Dockerfile
+│   └── requirements.txt
 ├── nemo-asr/
-│   ├── server.py        # NeMo ASR 微服務（OpenAI-compatible API）
+│   ├── server.py        # NeMo ASR 服務（OpenAI-compatible API）
 │   ├── Dockerfile       # 基於 nvcr.io/nvidia/nemo
 │   └── requirements.txt
 └── nginx/
@@ -235,9 +246,17 @@ ollama_base_url: "http://<host>:11434"
 | `GET` | `/api/library` | 推薦模型列表 |
 | `POST` | `/api/pull` | 下載模型（SSE 串流進度） |
 | `POST` | `/api/translate` | 翻譯文字（SSE 串流回應） |
-| `POST` | `/api/transcribe` | 音訊辨識 → 文字（`backend=whisper\|nemo`） |
+| `POST` | `/api/transcribe` | 音訊辨識 → 文字（`diarize=true` 加講者辨識） |
+| `POST` | `/api/diarize/reset` | 清除講者狀態（下一位說話者重新成為 A） |
 
 ## 常見問題
+
+**雙向模式講者辨識不準**  
+按下 **🔄 重設講者** 可清除講者嵌入學習紀錄。建議對話開始前先重設一次。  
+首次進入雙向模式時，第一位說話者會被辨識為講者 A。
+
+**雙向模式不支援 Web Speech**  
+進入雙向模式時會自動切換為 Whisper，因為 Web Speech 無法提供原始音訊給講者辨識使用。
 
 **Whisper 辨識速度慢**  
 CPU 模式下 `small` 模型每段約 1–2 秒，可改為 `tiny` 或 `base` 加快，或改用 NeMo (NVIDIA GPU)。
@@ -268,6 +287,7 @@ CPU 模式下 `small` 模型每段約 1–2 秒，可改為 `tiny` 或 `base` �
 - **後端**：FastAPI + uvicorn + httpx
 - **LLM**：Ollama（本地推論）
 - **STT**：faster-whisper / NVIDIA NeMo ASR
+- **講者辨識**：resemblyzer GE2E 嵌入 + spectralcluster 特徵展重測
 - **前端**：原生 HTML / CSS / JavaScript，Web Speech API + MediaRecorder
 - **代理**：nginx（TLS 終止 + HTTP→HTTPS 重導）
 - **容器**：Docker Compose（profiles 支援選用服務）

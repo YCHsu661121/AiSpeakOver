@@ -63,6 +63,15 @@ function toggleDebugPanel() {
   if (p) p.hidden = !p.hidden;
 }
 
+// Ctrl+Shift+D 鍵盤快捷鍵
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+    e.preventDefault();
+    const p = document.getElementById('debugPanel');
+    if (p) p.hidden = !p.hidden;
+  }
+});
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await loadConfig();
@@ -191,11 +200,25 @@ async function loadModels() {
     // If config model not found, fall back to first
     if (!sel.value) sel.selectedIndex = 0;
     currentModel = sel.value;
+    _updateModelBadge();
 
-    sel.addEventListener('change', () => { currentModel = sel.value; });
+    sel.addEventListener('change', () => { currentModel = sel.value; _updateModelBadge(); });
   } catch (e) {
     setStatus('無法載入模型：' + e.message, 'error');
   }
+}
+
+function _updateModelBadge() {
+  let badge = document.getElementById('modelBadge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'modelBadge';
+    badge.style.cssText = 'font-size:.7rem;color:#888;margin-left:6px;white-space:nowrap;';
+    const brand = document.querySelector('.brand');
+    if (brand) brand.appendChild(badge);
+  }
+  badge.textContent = currentModel ? `・${currentModel}` : '・未選模型';
+  badge.style.color = currentModel ? '#8f8' : '#f88';
 }
 
 async function showModelPicker() {

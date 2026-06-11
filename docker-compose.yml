@@ -62,6 +62,7 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./app/static:/app/static:ro
+      - ./app/main.py:/app/main.py:ro
     restart: unless-stopped
     depends_on:
       - ollama

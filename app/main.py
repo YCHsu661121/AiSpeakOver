@@ -382,6 +382,8 @@ async def api_translate(request: Request):
         try:
             async with httpx.AsyncClient(timeout=60) as client:
                 async with client.stream("POST", f"{OLLAMA_BASE_URL}/api/chat", json=payload) as resp:
+                    logger.info("translate Ollama HTTP %d  model=%s", resp.status_code, model)
+                    token_count = 0
                     async for line in resp.aiter_lines():
                         if not line:
                             continue
@@ -391,10 +393,13 @@ async def api_translate(request: Request):
                             continue
                         content = data.get("message", {}).get("content", "")
                         if content:
+                            token_count += 1
                             yield f"data: {json.dumps({'content': content})}\n\n"
                         if data.get("done"):
+                            logger.info("translate done  tokens=%d", token_count)
                             yield "data: [DONE]\n\n"
         except Exception as exc:
+            logger.error("translate stream error: %s", exc)
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
 
     return StreamingResponse(

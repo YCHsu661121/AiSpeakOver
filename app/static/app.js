@@ -169,8 +169,8 @@ async function requestMicAndStart() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     _micStream = stream;
     startVolMonitor(stream);
-    if (sttMode === 'whisper') initWhisperMode(stream);
-    else startListening();
+    if (sttMode === 'webspeech') startListening();
+    else initWhisperMode(stream);  // whisper & nemo both use MediaRecorder
   } catch (e) {
     dbg('getUserMedia failed: ' + e.name + ' — ' + e.message, 'error');
     showMicPrompt(e);
@@ -207,8 +207,8 @@ function showMicPrompt(err) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       _micStream = stream;
       startVolMonitor(stream);
-      if (sttMode === 'whisper') initWhisperMode(stream);
-      else startListening();
+      if (sttMode === 'webspeech') startListening();
+      else initWhisperMode(stream);
     } catch (e) {
       dbg('mic retry failed: ' + e.name + ' — ' + e.message, 'error');
       bar.textContent = '⚠️ ' + micErrMsg(e);
@@ -230,8 +230,10 @@ async function loadConfig() {
     dbg(`config loaded: stt=${sttMode}  model=${currentModel}  ${cfg.default_source_lang}→${cfg.default_target_lang}`, 'ok');
     document.getElementById('sourceLang').value = sourceLang;
     document.getElementById('targetLang').value = targetLang;
-    document.getElementById('sttToggle').value  = sttMode;
     updateLangLabels();
+    // setSttMode wires up health-check + recorder init after mic is ready
+    // Here we only sync the dropdown; actual init happens in requestMicAndStart
+    document.getElementById('sttToggle').value  = sttMode;
   } catch (e) {
     setStatus('無法載入設定：' + e.message, 'error');
   }

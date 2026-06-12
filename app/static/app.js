@@ -63,6 +63,16 @@ function dbg(msg, level = 'info') {
   log.scrollTop = log.scrollHeight;
 }
 function clearDebugLog() { const l = document.getElementById('debugLog'); if (l) l.innerHTML = ''; }
+function downloadDebugLog() {
+  const log = document.getElementById('debugLog');
+  const text = log ? log.innerText : '';
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `aispeakover-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.log`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 function toggleDebugPanel() {
   const p = document.getElementById('debugPanel');
   if (!p) { console.error('debugPanel not found'); return; }

@@ -1,5 +1,7 @@
 import asyncio
 import json
+import logging
+import logging.handlers
 import os
 from pathlib import Path
 
@@ -8,6 +10,18 @@ import yaml
 from fastapi import FastAPI, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+
+# ── Logging ─────────────────────────────────────────────────────────────────
+
+LOG_DIR = Path("/app/logs")
+LOG_DIR.mkdir(exist_ok=True)
+
+_log_handler = logging.handlers.RotatingFileHandler(
+    LOG_DIR / "app.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+)
+_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(), _log_handler])
+logger = logging.getLogger("aispeakover")
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +48,19 @@ DIARIZE_BASE_URL: str = os.environ.get("DIARIZE_BASE_URL") or _cfg.get("diarize_
 # ── App ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="AiSpeakOver")
+
+@app.get("/api/log")
+async def api_log(lines: int = 200):
+    """Return the last N lines of app.log as plain text."""
+    log_file = LOG_DIR / "app.log"
+    if not log_file.exists():
+        return JSONResponse({"error": "log file not found"}, status_code=404)
+    with open(log_file, encoding="utf-8", errors="replace") as f:
+        all_lines = f.readlines()
+    return StreamingResponse(
+        iter(all_lines[-lines:]),
+        media_type="text/plain; charset=utf-8",
+    )
 
 # ── API routes (must come before static mount) ───────────────────────────────
 
@@ -88,6 +115,7 @@ async def api_transcribe(
     filename     = "audio" + ext
     content_type = base_mime
 
+    logger.info("transcribe  backend=%s  size=%dB  mime=%s", backend, len(audio_bytes), content_type)
     async def stt_call() -> str:
         async with httpx.AsyncClient(timeout=timeout) as client:
             stt_data: dict = {"model": stt_model, "response_format": "json"}

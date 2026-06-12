@@ -138,6 +138,8 @@ async def api_transcribe(
                 files={"file": (filename, audio_bytes)},
                 data=stt_data,
             )
+            if resp.status_code >= 400:
+                logger.error("STT %s %d: %s", base_url, resp.status_code, resp.text[:500])
             resp.raise_for_status()
             return resp.json().get("text", "").strip()
 
@@ -171,6 +173,8 @@ async def api_transcribe(
                         files={"file": (filename, audio_bytes)},
                         data=stt_data,
                     )
+                    if resp.status_code >= 400:
+                        logger.error("Whisper fallback %d: %s", resp.status_code, resp.text[:500])
                     resp.raise_for_status()
                     return resp.json().get("text", "").strip(), True
             raise

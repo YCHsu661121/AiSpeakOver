@@ -62,6 +62,18 @@ async def api_log(lines: int = 200):
         media_type="text/plain; charset=utf-8",
     )
 
+@app.post("/api/log")
+async def api_log_write(request: Request):
+    """Receive a log entry from the frontend and append to app.log."""
+    try:
+        body = await request.json()
+        level = str(body.get("level", "info")).upper()
+        msg   = str(body.get("msg", ""))
+        logger.log(getattr(logging, level, logging.INFO), "[UI] %s", msg)
+    except Exception:
+        pass
+    return {"ok": True}
+
 # ── API routes (must come before static mount) ───────────────────────────────
 
 @app.get("/api/config")

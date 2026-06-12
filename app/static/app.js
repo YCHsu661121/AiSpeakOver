@@ -61,6 +61,12 @@ function dbg(msg, level = 'info') {
     `<span class="dbg-msg">${String(msg).replace(/</g, '&lt;')}</span>`;
   log.appendChild(row);
   log.scrollTop = log.scrollHeight;
+  // Fire-and-forget: write to server log file
+  fetch('/api/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level, msg: `${ts} ${msg}` }),
+  }).catch(() => {});
 }
 function clearDebugLog() { const l = document.getElementById('debugLog'); if (l) l.innerHTML = ''; }
 function downloadDebugLog() {

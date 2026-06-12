@@ -37,7 +37,7 @@ const MAX_SPEECH_MS  = 10000;  // ms of continuous speech → force flush
 // Whisper state
 let _whisperRecorder  = null;
 let _whisperChunks    = [];
-let _whisperHeaderChunk = null; // first chunk contains WebM EBML header — must prepend to every flush
+let _whisperMime      = '';     // cached mimeType for recorder restarts
 let _whisperVadId     = null;   // setInterval ID
 let _whisperSilTimer  = null;   // silence timeout handle
 let _whisperForceTimer= null;   // max-duration force-flush handle
@@ -639,26 +639,29 @@ function appendFinal(text) {
 
 // ── Whisper STT (faster-whisper via backend proxy) ────────────────────────
 
+function _startFreshRecorder(stream) {
+  if (_whisperRecorder && _whisperRecorder.state !== 'inactive') {
+    _whisperRecorder.ondataavailable = null;
+    _whisperRecorder.onstop = null;
+    _whisperRecorder.stop();
+  }
+  _whisperChunks = [];
+  _whisperRecorder = new MediaRecorder(stream, _whisperMime ? { mimeType: _whisperMime } : undefined);
+  _whisperRecorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) _whisperChunks.push(e.data);
+  };
+  _whisperRecorder.start(200);
+}
+
 function initWhisperMode(stream) {
   _whisperActive    = true;
   _whisperChunks    = [];
-  _whisperHeaderChunk = null;
   _whisperHasSpeech = false;
 
-  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+  _whisperMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
     .find(m => MediaRecorder.isTypeSupported(m)) || '';
 
-  _whisperRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-  _whisperRecorder.ondataavailable = e => {
-    if (e.data && e.data.size > 0) {
-      if (!_whisperHeaderChunk) {
-        // First chunk always contains the WebM EBML header — keep it
-        _whisperHeaderChunk = e.data;
-      }
-      _whisperChunks.push(e.data);
-    }
-  };
-  _whisperRecorder.start(200);  // collect a chunk every 200 ms
+  _startFreshRecorder(stream);
 
   _startVad();
   setBadge(true);
@@ -709,15 +712,24 @@ function _stopVad() {
 
 async function flushWhisperChunk() {
   if (!_whisperHasSpeech || _whisperChunks.length === 0) return;
-
-  const chunks = [..._whisperChunks];
-  _whisperChunks    = [];
-  // Keep header chunk so next flush is also valid WebM
-  if (_whisperHeaderChunk) _whisperChunks.push(_whisperHeaderChunk);
   _whisperHasSpeech = false;
 
-  const mimeType = _whisperRecorder?.mimeType || 'audio/webm';
-  const blob = new Blob(chunks, { type: mimeType });
+  const mimeType = _whisperRecorder?.mimeType || _whisperMime || 'audio/webm';
+  const stream   = _micStream; // save ref before async operations
+
+  // Stop recorder → triggers final ondataavailable → onstop
+  // This gives us a self-contained, valid WebM blob every time
+  const blob = await new Promise(resolve => {
+    _whisperRecorder.onstop = () => {
+      const b = new Blob(_whisperChunks, { type: mimeType });
+      _whisperChunks = [];
+      // Restart fresh recorder immediately for next segment
+      if (_whisperActive && stream) _startFreshRecorder(stream);
+      resolve(b);
+    };
+    _whisperRecorder.stop(); // fires ondataavailable (final chunk) then onstop
+  });
+
   if (blob.size < 1000) { dbg(`blob too small (${blob.size}B), skip`, 'warn'); return; }
 
   const form = new FormData();
@@ -785,7 +797,11 @@ function stopWhisperMode() {
   _stopVad();
   _whisperChunks    = [];
   _whisperHasSpeech = false;
-  if (_whisperRecorder && _whisperRecorder.state !== 'inactive') _whisperRecorder.stop();
+  if (_whisperRecorder && _whisperRecorder.state !== 'inactive') {
+    _whisperRecorder.ondataavailable = null;
+    _whisperRecorder.onstop = null;
+    _whisperRecorder.stop();
+  }
   _whisperRecorder = null;
 }
 

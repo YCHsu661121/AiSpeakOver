@@ -145,7 +145,6 @@ async def api_transcribe(
                 logger.error("STT %s %d (body_len=%d): ...%s", base_url, resp.status_code, len(body), snippet)
             resp.raise_for_status()
             body = resp.json()
-            logger.info("STT %s 200 raw=%s", base_url, str(body)[:300])
             return (body.get("text") or body.get("transcription") or body.get("transcript") or "").strip()
 
     async def diarize_call() -> int:

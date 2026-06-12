@@ -139,7 +139,10 @@ async def api_transcribe(
                 data=stt_data,
             )
             if resp.status_code >= 400:
-                logger.error("STT %s %d: %s", base_url, resp.status_code, resp.text[:500])
+                body = resp.text
+                # ffmpeg errors put the actual message at the END — log tail
+                snippet = body[-1000:] if len(body) > 1000 else body
+                logger.error("STT %s %d (body_len=%d): ...%s", base_url, resp.status_code, len(body), snippet)
             resp.raise_for_status()
             return resp.json().get("text", "").strip()
 
@@ -174,7 +177,9 @@ async def api_transcribe(
                         data=stt_data,
                     )
                     if resp.status_code >= 400:
-                        logger.error("Whisper fallback %d: %s", resp.status_code, resp.text[:500])
+                        body = resp.text
+                        snippet = body[-1000:] if len(body) > 1000 else body
+                        logger.error("Whisper fallback %d (body_len=%d): ...%s", resp.status_code, len(body), snippet)
                     resp.raise_for_status()
                     return resp.json().get("text", "").strip(), True
             raise

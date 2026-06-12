@@ -127,7 +127,7 @@ async def api_transcribe(
     filename     = "audio" + ext
     content_type = base_mime
 
-    logger.info("transcribe  backend=%s  size=%dB  mime=%s", backend, len(audio_bytes), content_type)
+    logger.info("transcribe  backend=%s  size=%dB  filename=%s", backend, len(audio_bytes), filename)
     async def stt_call() -> str:
         async with httpx.AsyncClient(timeout=timeout) as client:
             stt_data: dict = {"model": stt_model, "response_format": "json"}
@@ -135,7 +135,7 @@ async def api_transcribe(
                 stt_data["language"] = language
             resp = await client.post(
                 f"{base_url}/v1/audio/transcriptions",
-                files={"file": (filename, audio_bytes, content_type)},
+                files={"file": (filename, audio_bytes)},
                 data=stt_data,
             )
             resp.raise_for_status()
@@ -145,7 +145,7 @@ async def api_transcribe(
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"{DIARIZE_BASE_URL}/assign",
-                files={"audio": (filename, audio_bytes, content_type)},
+                files={"audio": (filename, audio_bytes)},
             )
             resp.raise_for_status()
             return int(resp.json().get("speaker_id", 0))
@@ -168,7 +168,7 @@ async def api_transcribe(
                         stt_data["language"] = language
                     resp = await client.post(
                         f"{fallback_url}/v1/audio/transcriptions",
-                        files={"file": (filename, audio_bytes, content_type)},
+                        files={"file": (filename, audio_bytes)},
                         data=stt_data,
                     )
                     resp.raise_for_status()
